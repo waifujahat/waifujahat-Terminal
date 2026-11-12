@@ -1,3 +1,10 @@
+/*
+ * Waifujahat Terminal
+ * Author : waifujahat
+ * Module : Terminal / Selection
+ * Purpose: Tracks selection independent of UI rendering.
+ */
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PosisiSeleksi {
     pub baris: usize,

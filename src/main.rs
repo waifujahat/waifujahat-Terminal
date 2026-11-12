@@ -1,9 +1,8 @@
 /*
  * Waifujahat Terminal
  * Author : waifujahat
- * Module : crate
- *
- * Initializes the native application window
+ * Module : Application / Bootstrap
+ * Purpose: Initializes the native GPUI window.
  */
 
 mod tampilan;

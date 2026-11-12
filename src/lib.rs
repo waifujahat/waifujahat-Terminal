@@ -1,9 +1,8 @@
 /*
  * Waifujahat Terminal
  * Author : waifujahat
- * Module : crate
- *
- * Exposes reusable terminal backend modules
+ * Module : Terminal / Library
+ * Purpose: Exposes reusable terminal components.
  */
 
 pub mod terminal;

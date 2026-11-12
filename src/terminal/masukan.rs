@@ -1,3 +1,10 @@
+/*
+ * Waifujahat Terminal
+ * Author : waifujahat
+ * Module : Terminal / Input buffer
+ * Purpose: Edits local text input and cursor position.
+ */
+
 #[derive(Default)]
 pub struct MasukanTerminal {
     teks: String,
