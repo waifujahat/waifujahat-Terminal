@@ -7,8 +7,10 @@
 
 use super::warna::{PotonganWarna, warna_rgb};
 
+use std::sync::mpsc::{self, Receiver, Sender};
+
 use alacritty_terminal::{
-    event::VoidListener,
+    event::{Event, EventListener},
     grid::Dimensions,
     index::{Column, Line},
     term::{
@@ -19,23 +21,48 @@ use alacritty_terminal::{
     vte::ansi::Processor,
 };
 
+struct PengirimRespons {
+    pengirim: Sender<Vec<u8>>,
+}
+
+impl EventListener for PengirimRespons {
+    fn send_event(&self, kejadian: Event) {
+        if let Event::PtyWrite(teks) = kejadian {
+            let _ = self.pengirim.send(teks.into_bytes());
+        }
+    }
+}
+
 pub struct MotorTerminal {
-    terminal: Term<VoidListener>,
+    terminal: Term<PengirimRespons>,
     parser: Processor,
+    penerima_respons: Receiver<Vec<u8>>,
 }
 
 impl MotorTerminal {
     pub fn baru(kolom: usize, baris: usize) -> Self {
         let ukuran = TermSize::new(kolom.max(2), baris.max(1));
+        let (pengirim_respons, penerima_respons) = mpsc::channel();
 
         Self {
-            terminal: Term::new(Config::default(), &ukuran, VoidListener),
+            terminal: Term::new(
+                Config::default(),
+                &ukuran,
+                PengirimRespons {
+                    pengirim: pengirim_respons,
+                },
+            ),
             parser: Processor::new(),
+            penerima_respons,
         }
     }
 
     pub fn terima(&mut self, keluaran: &[u8]) {
         self.parser.advance(&mut self.terminal, keluaran);
+    }
+
+    pub fn ambil_respons(&self) -> Option<Vec<u8>> {
+        self.penerima_respons.try_recv().ok()
     }
 
     pub fn ubah_ukuran(&mut self, kolom: usize, baris: usize) {

@@ -76,12 +76,10 @@ impl SesiTerminal {
             })
             .context("Gagal membuat thread penulis")?;
 
-        let pengirim_respons = pengirim_masukan.clone();
-
         thread::Builder::new()
             .name("waifujahat-pty-reader".into())
             .spawn(move || {
-                jalankan_pembaca(pembaca, pengirim_peristiwa, pengirim_respons);
+                jalankan_pembaca(pembaca, pengirim_peristiwa);
             })
             .context("Gagal membuat thread pembaca")?;
 

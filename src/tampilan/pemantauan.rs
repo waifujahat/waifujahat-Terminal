@@ -21,6 +21,16 @@ impl JendelaTerminal {
                 Some(PesanTerminal::Keluaran(buffer)) => {
                     self.layar.terima(&buffer);
                     self.motor.terima(&buffer);
+
+                    while let Some(respons) = self.motor.ambil_respons() {
+                        if let Some(sesi) = &self.sesi
+                            && let Err(kesalahan) = sesi.kirim_bytes(&respons)
+                        {
+                            self.status = format!("Gagal membalas permintaan terminal: {kesalahan}");
+                            break;
+                        }
+                    }
+
                     berubah = true;
                 }
 
