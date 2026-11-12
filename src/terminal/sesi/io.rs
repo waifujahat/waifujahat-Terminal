@@ -28,10 +28,7 @@ pub(super) fn jalankan_penulis(
     }
 }
 
-pub(super) fn jalankan_pembaca(
-    mut pembaca: Box<dyn Read + Send>,
-    pengirim: Sender<PesanTerminal>,
-) {
+pub(super) fn jalankan_pembaca(mut pembaca: Box<dyn Read + Send>, pengirim: Sender<PesanTerminal>) {
     let mut buffer = [0u8; 4096];
 
     loop {
