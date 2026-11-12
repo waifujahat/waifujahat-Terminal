@@ -117,8 +117,6 @@ impl SesiTerminal {
     pub fn try_ambil(&self) -> Option<PesanTerminal> {
         self.penerima_peristiwa.try_recv().ok()
     }
-
-
 }
 
 impl Drop for SesiTerminal {

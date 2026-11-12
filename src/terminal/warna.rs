@@ -46,9 +46,7 @@ fn warna_indeks(indeks: u8) -> u32 {
 
 pub(super) fn warna_rgb(warna: Color, teks: u32, latar: u32) -> u32 {
     match warna {
-        Color::Spec(rgb) => {
-            (u32::from(rgb.r) << 16) | (u32::from(rgb.g) << 8) | u32::from(rgb.b)
-        }
+        Color::Spec(rgb) => (u32::from(rgb.r) << 16) | (u32::from(rgb.g) << 8) | u32::from(rgb.b),
 
         Color::Indexed(indeks) => warna_indeks(indeks),
 

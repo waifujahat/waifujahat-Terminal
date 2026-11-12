@@ -12,7 +12,7 @@ mod render;
 
 use std::time::Duration;
 
-use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window, prelude::*};
+use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window};
 use waifujahat_terminal::terminal::{
     LayarTerminal, MasukanTerminal, MotorTerminal, RiwayatPerintah, SeleksiTerminal, SesiTerminal,
 };

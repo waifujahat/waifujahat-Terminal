@@ -155,10 +155,7 @@ impl JendelaTerminal {
             return;
         };
 
-        let teks = teks
-            .replace("\r\n", " ")
-            .replace('\n', " ")
-            .replace('\r', " ");
+        let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
 
         self.masukan.sisipkan(&teks);
         self.selesai_navigasi_riwayat();

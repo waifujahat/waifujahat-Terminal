@@ -7,8 +7,8 @@
 
 use gpui::{Context, CursorStyle, MouseButton, Window, div, prelude::*, px, rgb};
 
-use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 use super::JendelaTerminal;
+use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
 
