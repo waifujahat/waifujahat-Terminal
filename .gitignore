@@ -1,0 +1,12 @@
+/target/
+/tests/
+/.vs/
+/.vscode/
+
+.env
+.env.*
+!.env.example
+/examples/
+
+*.log
+*.pdb
