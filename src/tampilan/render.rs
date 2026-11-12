@@ -5,7 +5,10 @@
  * Purpose: Renders ANSI output, selection, and terminal application chrome.
  */
 
-use gpui::{Context, CursorStyle, MouseButton, Window, div, prelude::*, px, rgb};
+use gpui::{
+    Context, CursorStyle, MouseButton, ObjectFit, StyledImage, Window, div, img, prelude::*, px,
+    rgb, rgba,
+};
 
 use super::JendelaTerminal;
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
@@ -139,8 +142,15 @@ impl JendelaTerminal {
 
 impl Render for JendelaTerminal {
     fn render(&mut self, _jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
+        let gambar_latar = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("assets")
+            .join("images")
+            .join("demo.jpg");
+
         div()
             .id("jendela-terminal")
+            .relative()
+            .overflow_hidden()
             .track_focus(&self.fokus)
             .on_key_down(konteks.listener(Self::proses_tombol))
             .on_mouse_down(
@@ -176,13 +186,28 @@ impl Render for JendelaTerminal {
             .font_family("Consolas")
             .text_size(px(14.0))
             .line_height(px(18.0))
+            .child(
+                img(gambar_latar)
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .object_fit(ObjectFit::Cover),
+            )
+            .child(div().absolute().inset_0().bg(rgba(0x090d18b3)))
             .child(self.buat_informasi_terminal())
             .child(self.buat_keluaran_terminal(konteks))
             .child(
                 div()
+                    .flex()
+                    .justify_between()
                     .text_xs()
                     .text_color(rgb(WARNA_AKSEN))
-                    .child(self.status.clone()),
+                    .child(self.status.clone())
+                    .child(if self.perintah_berjalan {
+                        "Running - Esc untuk membatalkan"
+                    } else {
+                        "Ready"
+                    }),
             )
     }
 }

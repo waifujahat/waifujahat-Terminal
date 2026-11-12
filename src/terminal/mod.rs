@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / Public API
- * Purpose: Exposes terminal engine, session, selection, and input modules.
+ * Purpose: Exposes reusable terminal components
  */
 
 mod layar;
@@ -11,6 +11,7 @@ mod motor;
 mod riwayat;
 mod seleksi;
 mod sesi;
+mod tombol;
 mod warna;
 
 pub use layar::LayarTerminal;
@@ -19,4 +20,5 @@ pub use motor::MotorTerminal;
 pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};
+pub use tombol::TombolTerminal;
 pub use warna::PotonganWarna;

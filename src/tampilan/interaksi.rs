@@ -9,7 +9,7 @@ use gpui::{
     ClipboardItem, Context, Font, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
     Pixels, Point, TextRun, Window, px, white,
 };
-use waifujahat_terminal::terminal::PosisiSeleksi;
+use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal};
 
 use super::JendelaTerminal;
 
@@ -179,6 +179,14 @@ impl JendelaTerminal {
             return;
         }
 
+        self.indeks_baris_sebelum_perintah = self
+            .layar
+            .baris()
+            .iter()
+            .rposition(|baris| !baris.trim().is_empty())
+            .unwrap_or(0);
+
+        self.perintah_berjalan = !perintah.trim().is_empty();
         self.riwayat.catat(perintah);
         self.seleksi.bersihkan();
         self.status.clear();
@@ -205,28 +213,21 @@ impl JendelaTerminal {
         self.selesai_navigasi_riwayat();
         self.seleksi.bersihkan();
 
-        if let Some(sesi) = &self.sesi {
-            if let Err(kesalahan) = sesi.kirim_bytes(b"\x03") {
-                self.status = format!("Gagal mengirim interupsi: {kesalahan}");
-            } else {
-                self.status.clear();
-            }
-        }
+        self.status = match &self.sesi {
+            Some(sesi) => match sesi.kirim_tombol(TombolTerminal::Kontrol('c')) {
+                Ok(()) => "Esc berhasil".into(),
+
+                Err(kesalahan) => {
+                    format!("Gagal mengirim interupsi: {kesalahan}")
+                }
+            },
+
+            None => "Sesi PowerShell tidak tersedia".into(),
+        };
     }
 
     fn proses_escape(&mut self) {
-        let baris = self.baris_terminal();
-
-        if self.seleksi.teks_terpilih(&baris).is_some() {
-            self.seleksi.bersihkan();
-        } else if !self.masukan.teks().is_empty() {
-            self.masukan.bersihkan();
-            self.selesai_navigasi_riwayat();
-        } else if let Some(sesi) = &self.sesi
-            && let Err(kesalahan) = sesi.kirim_bytes(b"\x1b")
-        {
-            self.status = format!("Gagal mengirim Escape: {kesalahan}");
-        }
+        self.hentikan_perintah();
     }
 
     pub(super) fn proses_tombol(
@@ -240,13 +241,7 @@ impl JendelaTerminal {
         if tombol.modifiers.control || tombol.modifiers.platform {
             match tombol.key.to_ascii_lowercase().as_str() {
                 "c" => {
-                    let baris = self.baris_terminal();
-
-                    if self.seleksi.teks_terpilih(&baris).is_some() {
-                        self.salin_seleksi(konteks);
-                    } else {
-                        self.hentikan_perintah();
-                    }
+                    self.salin_seleksi(konteks);
                 }
 
                 "v" => {

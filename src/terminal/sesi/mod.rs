@@ -10,6 +10,8 @@ use std::thread;
 
 mod io;
 
+use super::tombol::TombolTerminal;
+
 use io::{jalankan_pembaca, jalankan_penulis};
 
 use anyhow::{Context, Result, anyhow};
@@ -99,6 +101,14 @@ impl SesiTerminal {
         self.pengirim_masukan
             .send(masukan.to_vec())
             .map_err(|_| anyhow!("Koneksi input terminal terputus"))
+    }
+
+    pub fn kirim_tombol(&self, tombol: TombolTerminal<'_>) -> Result<()> {
+        if let Some(bytes) = tombol.ke_bytes() {
+            self.kirim_bytes(&bytes)?;
+        }
+
+        Ok(())
     }
 
     pub fn ubah_ukuran(&self, kolom: u16, baris: u16) -> Result<()> {
