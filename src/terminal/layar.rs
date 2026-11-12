@@ -1,3 +1,10 @@
+/*
+ * Waifujahat Terminal
+ * Author : waifujahat
+ * Module : Terminal / Legacy screen
+ * Purpose: Maintains the legacy parser while the Alacritty engine is integrated.
+ */
+
 use std::collections::VecDeque;
 
 use vte::{Params, Parser, Perform};

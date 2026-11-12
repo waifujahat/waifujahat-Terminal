@@ -2,8 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Theme
- *
- * Defines color palette for native terminal interface
+ * Purpose: Defines colors shared by the native interface.
  */
 
 pub(crate) const WARNA_LATAR: u32 = 0x0c1021;

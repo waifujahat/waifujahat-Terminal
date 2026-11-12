@@ -1,12 +1,19 @@
-use std::io::{Read, Write};
+/*
+ * Waifujahat Terminal
+ * Author : waifujahat
+ * Module : Terminal / PTY session
+ * Purpose: Owns the PowerShell process, PTY, resizing, and worker lifetime.
+ */
+
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
+mod io;
+
+use io::{jalankan_pembaca, jalankan_penulis};
+
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
-
-const KUERI_KURSOR: &[u8] = b"\x1b[6n";
-const RESPONS_KURSOR: &[u8] = b"\x1b[1;1R";
 
 #[derive(Debug)]
 pub enum PesanTerminal {
@@ -16,7 +23,7 @@ pub enum PesanTerminal {
 }
 
 pub struct SesiTerminal {
-    _master: Box<dyn MasterPty + Send>,
+    master: Box<dyn MasterPty + Send>,
     proses: Box<dyn Child + Send + Sync>,
     pengirim_masukan: Sender<Vec<u8>>,
     penerima_peristiwa: Receiver<PesanTerminal>,
@@ -65,7 +72,7 @@ impl SesiTerminal {
         thread::Builder::new()
             .name("waifujahat-pty-writer".into())
             .spawn(move || {
-                Self::jalankan_penulis(penulis, penerima_masukan, pengirim_kesalahan);
+                jalankan_penulis(penulis, penerima_masukan, pengirim_kesalahan);
             })
             .context("Gagal membuat thread penulis")?;
 
@@ -74,12 +81,12 @@ impl SesiTerminal {
         thread::Builder::new()
             .name("waifujahat-pty-reader".into())
             .spawn(move || {
-                Self::jalankan_pembaca(pembaca, pengirim_peristiwa, pengirim_respons);
+                jalankan_pembaca(pembaca, pengirim_peristiwa, pengirim_respons);
             })
             .context("Gagal membuat thread pembaca")?;
 
         Ok(Self {
-            _master: pasangan.master,
+            master: pasangan.master,
             proses,
             pengirim_masukan,
             penerima_peristiwa,
@@ -97,7 +104,7 @@ impl SesiTerminal {
     }
 
     pub fn ubah_ukuran(&self, kolom: u16, baris: u16) -> Result<()> {
-        self._master
+        self.master
             .resize(PtySize {
                 rows: baris.max(1),
                 cols: kolom.max(1),
@@ -111,72 +118,7 @@ impl SesiTerminal {
         self.penerima_peristiwa.try_recv().ok()
     }
 
-    fn jalankan_penulis(
-        mut penulis: Box<dyn Write + Send>,
-        penerima: Receiver<Vec<u8>>,
-        pengirim: Sender<PesanTerminal>,
-    ) {
-        while let Ok(masukan) = penerima.recv() {
-            let hasil = penulis.write_all(&masukan).and_then(|_| penulis.flush());
 
-            if let Err(kesalahan) = hasil {
-                let _ = pengirim.send(PesanTerminal::Kesalahan(format!(
-                    "Gagal menulis ke terminal: {kesalahan}"
-                )));
-
-                break;
-            }
-        }
-    }
-
-    fn jalankan_pembaca(
-        mut pembaca: Box<dyn Read + Send>,
-        pengirim: Sender<PesanTerminal>,
-        pengirim_respons: Sender<Vec<u8>>,
-    ) {
-        let mut buffer = [0u8; 4096];
-        let mut posisi_kueri = 0usize;
-
-        loop {
-            let jumlah = match pembaca.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(jumlah) => jumlah,
-                Err(kesalahan) => {
-                    let _ = pengirim.send(PesanTerminal::Kesalahan(format!(
-                        "Gagal membaca terminal: {kesalahan}"
-                    )));
-
-                    break;
-                }
-            };
-
-            if std::env::var_os("WAIFUJAHAT_DEBUG_PTY").is_some() {
-                eprintln!("[ConPTY RAW] {}", buffer[..jumlah].escape_ascii());
-            }
-
-            for &byte in &buffer[..jumlah] {
-                if byte == KUERI_KURSOR[posisi_kueri] {
-                    posisi_kueri += 1;
-
-                    if posisi_kueri == KUERI_KURSOR.len() {
-                        let _ = pengirim_respons.send(RESPONS_KURSOR.to_vec());
-                        posisi_kueri = 0;
-                    }
-                } else {
-                    posisi_kueri = usize::from(byte == KUERI_KURSOR[0]);
-                }
-            }
-
-            if pengirim
-                .send(PesanTerminal::Keluaran(buffer[..jumlah].to_vec()))
-                .is_err()
-            {
-                break;
-            }
-        }
-
-        let _ = pengirim.send(PesanTerminal::Berakhir);
-    }
 }
 
 impl Drop for SesiTerminal {
