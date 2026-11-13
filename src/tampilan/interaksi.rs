@@ -335,9 +335,20 @@ impl JendelaTerminal {
         }
 
         if tombol.modifiers.control || tombol.modifiers.platform {
+            let aplikasi_interaktif = self.perintah_berjalan || self.motor.layar_alternatif_aktif();
+
             match tombol.key.to_ascii_lowercase().as_str() {
                 "c" => {
-                    self.salin_seleksi(konteks);
+                    let ada_seleksi = self
+                        .seleksi
+                        .teks_terpilih(&self.baris_seleksi())
+                        .is_some_and(|teks| !teks.is_empty());
+
+                    if ada_seleksi {
+                        self.salin_seleksi(konteks);
+                    } else if aplikasi_interaktif {
+                        self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
+                    }
                 }
 
                 "v" => {
@@ -345,8 +356,12 @@ impl JendelaTerminal {
                 }
 
                 "a" => {
-                    let baris = self.baris_seleksi();
-                    self.seleksi.pilih_semua(&baris);
+                    if self.motor.layar_alternatif_aktif() {
+                        self.kirim_input_langsung(TombolTerminal::Kontrol('a'));
+                    } else {
+                        let baris = self.baris_seleksi();
+                        self.seleksi.pilih_semua(&baris);
+                    }
                 }
 
                 _ => {}
@@ -368,7 +383,11 @@ impl JendelaTerminal {
         if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
             match tombol.key.to_ascii_lowercase().as_str() {
                 "escape" | "esc" => {
-                    self.proses_escape();
+                    if self.motor.layar_alternatif_aktif() {
+                        self.kirim_input_langsung(TombolTerminal::Escape);
+                    } else {
+                        self.proses_escape();
+                    }
                 }
 
                 "enter" => {
