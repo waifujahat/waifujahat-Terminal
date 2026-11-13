@@ -37,7 +37,9 @@ impl JendelaTerminal {
 
     pub(super) fn buat_keluaran_grid(&self, konteks: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
-        let (baris_kursor, _) = snapshot.posisi_kursor;
+        let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
+        let kursor_terlihat = snapshot.kursor_terlihat;
+        let jumlah_kolom = snapshot.kolom;
 
         let mut keluaran = div()
             .id("keluaran-grid")
@@ -59,6 +61,9 @@ impl JendelaTerminal {
 
         for (indeks, baris) in snapshot.baris.into_iter().enumerate() {
             let editor_aktif = indeks == baris_kursor && !self.perintah_berjalan;
+
+            let kursor_program_aktif =
+                self.perintah_berjalan && kursor_terlihat && indeks == baris_kursor;
 
             let mut teks_seleksi = baris.teks.clone();
 
@@ -122,17 +127,25 @@ impl JendelaTerminal {
                         .child(div().whitespace_nowrap().child(sesudah.to_string()));
                 }
             } else {
+                let batas_kursor = if kursor_program_aktif {
+                    kolom_kursor.saturating_add(1)
+                } else {
+                    0
+                };
+
                 let batas = baris
                     .sel
                     .iter()
                     .rposition(|sel| {
                         !sel.latar_default || (sel.teks != " " && !sel.pengisi_lebar_ganda)
                     })
-                    .map_or(0, |indeks| indeks + 1);
+                    .map_or(0, |indeks| indeks + 1)
+                    .max(batas_kursor)
+                    .min(jumlah_kolom);
 
                 let mut indeks_karakter = 0;
 
-                for sel in baris.sel.into_iter().take(batas) {
+                for (kolom, sel) in baris.sel.into_iter().take(batas).enumerate() {
                     if sel.pengisi_lebar_ganda {
                         continue;
                     }
@@ -153,7 +166,21 @@ impl JendelaTerminal {
                         elemen_sel = elemen_sel.bg(rgb(sel.warna_latar));
                     }
 
-                    elemen_baris = elemen_baris.child(elemen_sel.child(sel.teks));
+                    let mut elemen_sel = elemen_sel.child(sel.teks);
+
+                    if kursor_program_aktif && kolom == kolom_kursor {
+                        elemen_sel = elemen_sel.relative().child(
+                            div()
+                                .absolute()
+                                .left(px(0.0))
+                                .top(px(1.0))
+                                .w(px(2.0))
+                                .h(px(16.0))
+                                .bg(rgb(WARNA_AKSEN)),
+                        );
+                    }
+
+                    elemen_baris = elemen_baris.child(elemen_sel);
                 }
             }
 
