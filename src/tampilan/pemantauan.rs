@@ -41,8 +41,22 @@ impl JendelaTerminal {
             match pesan {
                 Some(PesanTerminal::Keluaran(buffer)) => {
                     self.layar.terima(&buffer);
+
+                    let layar_alternatif_sebelum = self.motor.layar_alternatif_aktif();
+
                     self.motor.terima(&buffer);
-                    if self.perintah_berjalan && self.prompt_powershell_terlihat() {
+
+                    let layar_alternatif_aktif = self.motor.layar_alternatif_aktif();
+
+                    if layar_alternatif_sebelum != layar_alternatif_aktif {
+                        self.seleksi.bersihkan();
+                        self.arah_gulir_seleksi = 0;
+                    }
+
+                    if self.perintah_berjalan
+                        && !layar_alternatif_aktif
+                        && self.prompt_powershell_terlihat()
+                    {
                         self.perintah_berjalan = false;
                     }
 
