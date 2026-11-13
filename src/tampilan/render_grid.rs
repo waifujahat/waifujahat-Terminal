@@ -22,16 +22,14 @@ impl JendelaTerminal {
             return self.baris_terminal();
         }
 
-        let snapshot = self.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
-        let (indeks_kursor, _) = snapshot.posisi_kursor;
+        let mut baris = self.motor.semua_baris();
 
-        let mut baris: Vec<String> = snapshot.baris.into_iter().map(|baris| baris.teks).collect();
+        if !self.perintah_berjalan && self.motor.offset_riwayat() == 0 {
+            let indeks_editor = self.motor.jumlah_baris_riwayat() + self.motor.posisi_kursor().0;
 
-        if !self.perintah_berjalan
-            && self.motor.offset_riwayat() == 0
-            && let Some(teks) = baris.get_mut(indeks_kursor)
-        {
-            teks.push_str(self.masukan.teks());
+            if let Some(teks) = baris.get_mut(indeks_editor) {
+                teks.push_str(self.masukan.teks());
+            }
         }
         baris
     }
@@ -41,6 +39,7 @@ impl JendelaTerminal {
         let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
         let kursor_terlihat = snapshot.kursor_terlihat;
         let jumlah_kolom = snapshot.kolom;
+        let indeks_awal_tampilan = self.motor.indeks_awal_tampilan();
         let sedang_melihat_riwayat = self.motor.offset_riwayat() > 0;
 
         let mut keluaran = div()
@@ -100,7 +99,9 @@ impl JendelaTerminal {
                 teks_seleksi.push_str(self.masukan.teks());
             }
 
-            let rentang = self.seleksi.potongan_baris(indeks, &teks_seleksi);
+            let indeks_seleksi = indeks_awal_tampilan + indeks;
+
+            let rentang = self.seleksi.potongan_baris(indeks_seleksi, &teks_seleksi);
 
             let mut elemen_baris = div()
                 .id(format!("baris-grid-{indeks}"))

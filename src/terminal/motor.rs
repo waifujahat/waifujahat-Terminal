@@ -182,6 +182,49 @@ impl MotorTerminal {
             .collect()
     }
 
+    pub fn indeks_awal_tampilan(&self) -> usize {
+        self.jumlah_baris_riwayat()
+            .saturating_sub(self.offset_riwayat())
+    }
+
+    pub fn semua_baris(&self) -> Vec<String> {
+        let grid = self.terminal.grid();
+
+        let Ok(jumlah_riwayat) = i32::try_from(grid.history_size()) else {
+            return Vec::new();
+        };
+
+        let Ok(tinggi) = i32::try_from(self.terminal.screen_lines()) else {
+            return Vec::new();
+        };
+
+        let jumlah_kolom = self.terminal.columns();
+        let mut hasil = Vec::new();
+
+        for indeks in -jumlah_riwayat..tinggi {
+            let baris = &grid[Line(indeks)];
+            let mut teks = String::new();
+
+            for kolom in 0..jumlah_kolom {
+                let sel = &baris[Column(kolom)];
+
+                if sel.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                    continue;
+                }
+
+                teks.push(sel.c);
+
+                if let Some(tambahan) = sel.zerowidth() {
+                    teks.extend(tambahan.iter().copied());
+                }
+            }
+
+            hasil.push(teks.trim_end_matches(' ').to_string());
+        }
+
+        hasil
+    }
+
     pub fn baris_berwarna(&self, warna_teks: u32, warna_latar: u32) -> Vec<Vec<PotonganWarna>> {
         let (jumlah_kolom, jumlah_baris) = self.ukuran();
         let mut hasil = Vec::with_capacity(jumlah_baris);
