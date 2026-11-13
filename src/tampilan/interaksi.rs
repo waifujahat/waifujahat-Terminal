@@ -157,6 +157,10 @@ impl JendelaTerminal {
 
         let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
 
+        if self.mode_grid_aktif() {
+            self.motor.kembali_ke_bawah();
+        }
+
         if self.perintah_berjalan {
             self.kirim_input_langsung(TombolTerminal::Teks(&teks));
         } else {
@@ -277,6 +281,11 @@ impl JendelaTerminal {
 
         if tombol.modifiers.alt {
             return;
+        }
+
+        if self.mode_grid_aktif() && self.motor.offset_riwayat() > 0 {
+            self.motor.kembali_ke_bawah();
+            self.seleksi.bersihkan();
         }
 
         if self.perintah_berjalan {
