@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Rendering
- * Purpose: Renders ANSI output, selection, and terminal application chrome.
+ * Purpose: Renders ANSI output, selection and terminal application chrome
  */
 
 use gpui::{
@@ -19,13 +19,25 @@ impl JendelaTerminal {
     pub(super) fn baris_terminal(&self) -> Vec<String> {
         let mut baris = self.layar.baris();
 
-        while baris.last().is_some_and(|teks| teks.is_empty()) {
-            baris.pop();
+        if baris.is_empty() {
+            baris.push(String::new());
         }
 
-        let baris_terakhir = baris.pop().unwrap_or_default();
+        let indeks_editor = self.layar.indeks_baris_kursor().min(baris.len() - 1);
 
-        baris.push(format!("{baris_terakhir}{}", self.masukan.teks()));
+        let indeks_terakhir_berisi = baris
+            .iter()
+            .rposition(|teks| !teks.trim().is_empty())
+            .unwrap_or(0);
+
+        let indeks_akhir = indeks_editor.max(indeks_terakhir_berisi);
+
+        baris.truncate(indeks_akhir + 1);
+
+        if !self.perintah_berjalan {
+            baris[indeks_editor].push_str(self.masukan.teks());
+        }
+
         baris
     }
 
@@ -39,6 +51,11 @@ impl JendelaTerminal {
         let baris = self.baris_terminal();
         let jumlah_baris = baris.len();
 
+        let indeks_editor = self
+            .layar
+            .indeks_baris_kursor()
+            .min(jumlah_baris.saturating_sub(1));
+
         let baris_motor = self.motor.baris_layar();
         let warna_motor = self.motor.baris_berwarna(WARNA_TEKS, WARNA_LATAR);
         let pergeseran = jumlah_baris.saturating_sub(baris_motor.len());
@@ -46,9 +63,8 @@ impl JendelaTerminal {
         let awalan = self
             .layar
             .baris()
-            .into_iter()
-            .rev()
-            .find(|teks| !teks.is_empty())
+            .get(indeks_editor)
+            .cloned()
             .unwrap_or_default();
 
         let mut keluaran = div()
@@ -70,9 +86,9 @@ impl JendelaTerminal {
             );
 
         for (indeks, teks) in baris.into_iter().enumerate() {
-            let terakhir = indeks + 1 == jumlah_baris;
+            let baris_editor = indeks == indeks_editor;
 
-            let tampilan = if terakhir {
+            let tampilan = if baris_editor && !self.perintah_berjalan {
                 self.masukan.tampilkan(&awalan)
             } else if teks.is_empty() {
                 " ".to_string()
@@ -105,7 +121,7 @@ impl JendelaTerminal {
                             .child(dipilih),
                     )
                     .child(div().whitespace_nowrap().child(sesudah));
-            } else if !terakhir {
+            } else if !baris_editor || self.perintah_berjalan {
                 let indeks_motor = indeks.checked_sub(pergeseran);
 
                 let baris_cocok = indeks_motor
@@ -116,13 +132,14 @@ impl JendelaTerminal {
                     let mut teks_berwarna = div().flex().items_center().whitespace_nowrap();
 
                     for bagian in potongan {
-                        teks_berwarna = teks_berwarna.child(
-                            div()
-                                .whitespace_nowrap()
-                                .text_color(rgb(bagian.warna_teks))
-                                .bg(rgb(bagian.warna_latar))
-                                .child(bagian.teks.clone()),
-                        );
+                        let mut elemen_teks =
+                            div().whitespace_nowrap().text_color(rgb(bagian.warna_teks));
+
+                        if bagian.warna_latar != WARNA_LATAR {
+                            elemen_teks = elemen_teks.bg(rgb(bagian.warna_latar));
+                        }
+
+                        teks_berwarna = teks_berwarna.child(elemen_teks.child(bagian.teks.clone()));
                     }
 
                     elemen_baris = elemen_baris.child(teks_berwarna);

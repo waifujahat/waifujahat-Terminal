@@ -146,7 +146,7 @@ impl JendelaTerminal {
 
         konteks.write_to_clipboard(ClipboardItem::new_string(teks));
 
-        self.status = "Teks disalin ke clipboard".into();
+        self.status = "Copy".into();
         konteks.notify();
     }
 
@@ -157,9 +157,13 @@ impl JendelaTerminal {
 
         let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
 
-        self.masukan.sisipkan(&teks);
-        self.selesai_navigasi_riwayat();
-        self.seleksi.bersihkan();
+        if self.perintah_berjalan {
+            self.kirim_input_langsung(TombolTerminal::Teks(&teks));
+        } else {
+            self.masukan.sisipkan(&teks);
+            self.selesai_navigasi_riwayat();
+            self.seleksi.bersihkan();
+        }
 
         self.gulir.scroll_to_bottom();
         konteks.notify();
@@ -230,6 +234,17 @@ impl JendelaTerminal {
         self.hentikan_perintah();
     }
 
+    fn kirim_input_langsung(&mut self, tombol: TombolTerminal<'_>) {
+        let Some(sesi) = &self.sesi else {
+            self.status = "Sesi PowerShell tidak tersedia".into();
+            return;
+        };
+
+        if let Err(kesalahan) = sesi.kirim_tombol(tombol) {
+            self.status = format!("Gagal mengirim input: {kesalahan}");
+        }
+    }
+
     pub(super) fn proses_tombol(
         &mut self,
         kejadian: &KeyDownEvent,
@@ -261,6 +276,66 @@ impl JendelaTerminal {
         }
 
         if tombol.modifiers.alt {
+            return;
+        }
+
+        if self.perintah_berjalan {
+            match tombol.key.to_ascii_lowercase().as_str() {
+                "escape" | "esc" => {
+                    self.proses_escape();
+                }
+
+                "enter" => {
+                    self.kirim_input_langsung(TombolTerminal::Enter);
+                }
+
+                "tab" => {
+                    self.kirim_input_langsung(TombolTerminal::Tab);
+                }
+
+                "backspace" => {
+                    self.kirim_input_langsung(TombolTerminal::HapusSebelum);
+                }
+
+                "delete" => {
+                    self.kirim_input_langsung(TombolTerminal::HapusSesudah);
+                }
+
+                "up" | "arrowup" => {
+                    self.kirim_input_langsung(TombolTerminal::Atas);
+                }
+
+                "down" | "arrowdown" => {
+                    self.kirim_input_langsung(TombolTerminal::Bawah);
+                }
+
+                "left" | "arrowleft" => {
+                    self.kirim_input_langsung(TombolTerminal::Kiri);
+                }
+
+                "right" | "arrowright" => {
+                    self.kirim_input_langsung(TombolTerminal::Kanan);
+                }
+
+                "home" => {
+                    self.kirim_input_langsung(TombolTerminal::Awal);
+                }
+
+                "end" => {
+                    self.kirim_input_langsung(TombolTerminal::Akhir);
+                }
+
+                _ => {
+                    if let Some(teks) = tombol.key_char.as_deref()
+                        && !teks.chars().any(char::is_control)
+                    {
+                        self.kirim_input_langsung(TombolTerminal::Teks(teks));
+                    }
+                }
+            }
+
+            self.gulir.scroll_to_bottom();
+            konteks.notify();
             return;
         }
 

@@ -311,4 +311,8 @@ impl LayarTerminal {
             .map(|baris| baris.iter().collect())
             .collect()
     }
+
+    pub fn indeks_baris_kursor(&self) -> usize {
+        self.buffer.baris_kursor
+    }
 }
