@@ -74,6 +74,12 @@ impl MotorTerminal {
         (self.terminal.columns(), self.terminal.screen_lines())
     }
 
+    pub fn posisi_kursor(&self) -> (usize, usize) {
+        let posisi = self.terminal.grid().cursor.point;
+
+        (usize::try_from(posisi.line.0).unwrap_or(0), posisi.column.0)
+    }
+
     pub fn sel(&self, baris: usize, kolom: usize) -> Option<&Cell> {
         let (jumlah_kolom, jumlah_baris) = self.ukuran();
 
