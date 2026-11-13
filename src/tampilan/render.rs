@@ -164,7 +164,9 @@ impl Render for JendelaTerminal {
             .join("images")
             .join("demo.jpg");
 
-        div()
+        let mode_grid = self.mode_grid_aktif();
+
+        let mut halaman = div()
             .id("jendela-terminal")
             .relative()
             .overflow_hidden()
@@ -211,20 +213,26 @@ impl Render for JendelaTerminal {
                     .object_fit(ObjectFit::Cover),
             )
             .child(div().absolute().inset_0().bg(rgba(0x090d18b3)))
-            .child(self.buat_informasi_terminal())
-            .child(self.buat_keluaran_terminal(konteks))
-            .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .text_xs()
-                    .text_color(rgb(WARNA_AKSEN))
-                    .child(self.status.clone())
-                    .child(if self.perintah_berjalan {
-                        "Running - Esc untuk membatalkan"
-                    } else {
-                        "Ready"
-                    }),
-            )
+            .child(self.buat_informasi_terminal());
+
+        if mode_grid {
+            halaman = halaman.child(self.buat_keluaran_grid(konteks));
+        } else {
+            halaman = halaman.child(self.buat_keluaran_terminal(konteks));
+        }
+
+        halaman.child(
+            div()
+                .flex()
+                .justify_between()
+                .text_xs()
+                .text_color(rgb(WARNA_AKSEN))
+                .child(self.status.clone())
+                .child(if self.perintah_berjalan {
+                    "Running - Esc untuk membatalkan"
+                } else {
+                    "Ready"
+                }),
+        )
     }
 }

@@ -11,6 +11,7 @@ mod motor;
 mod riwayat;
 mod seleksi;
 mod sesi;
+mod snapshot;
 mod tombol;
 mod warna;
 
@@ -20,5 +21,6 @@ pub use motor::MotorTerminal;
 pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};
+pub use snapshot::{BarisSnapshot, SelSnapshot, SnapshotTerminal};
 pub use tombol::TombolTerminal;
 pub use warna::PotonganWarna;
