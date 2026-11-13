@@ -34,6 +34,7 @@ pub struct SnapshotTerminal {
     pub kolom: usize,
     pub tinggi: usize,
     pub posisi_kursor: (usize, usize),
+    pub kursor_terlihat: bool,
     pub baris: Vec<BarisSnapshot>,
 }
 
@@ -110,6 +111,7 @@ impl MotorTerminal {
             kolom,
             tinggi,
             posisi_kursor: self.posisi_kursor(),
+            kursor_terlihat: self.kursor_terlihat(),
             baris,
         }
     }

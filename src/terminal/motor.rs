@@ -14,7 +14,7 @@ use alacritty_terminal::{
     grid::Dimensions,
     index::{Column, Line},
     term::{
-        Config, Term,
+        Config, Term, TermMode,
         cell::{Cell, Flags},
         test::TermSize,
     },
@@ -78,6 +78,10 @@ impl MotorTerminal {
         let posisi = self.terminal.grid().cursor.point;
 
         (usize::try_from(posisi.line.0).unwrap_or(0), posisi.column.0)
+    }
+
+    pub fn kursor_terlihat(&self) -> bool {
+        self.terminal.mode().contains(TermMode::SHOW_CURSOR)
     }
 
     pub fn sel(&self, baris: usize, kolom: usize) -> Option<&Cell> {
