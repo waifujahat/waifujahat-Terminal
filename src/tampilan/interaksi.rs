@@ -19,7 +19,7 @@ impl JendelaTerminal {
         posisi: Point<Pixels>,
         jendela: &mut Window,
     ) -> Option<PosisiSeleksi> {
-        let baris = self.baris_terminal();
+        let baris = self.baris_seleksi();
 
         if baris.is_empty() {
             return None;
@@ -97,7 +97,7 @@ impl JendelaTerminal {
             return;
         };
 
-        let baris = self.baris_terminal();
+        let baris = self.baris_seleksi();
 
         match kejadian.click_count {
             3.. => {
@@ -138,7 +138,7 @@ impl JendelaTerminal {
     }
 
     fn salin_seleksi(&mut self, konteks: &mut Context<Self>) {
-        let baris = self.baris_terminal();
+        let baris = self.baris_seleksi();
 
         let Some(teks) = self.seleksi.teks_terpilih(&baris) else {
             return;
@@ -264,7 +264,7 @@ impl JendelaTerminal {
                 }
 
                 "a" => {
-                    let baris = self.baris_terminal();
+                    let baris = self.baris_seleksi();
                     self.seleksi.pilih_semua(&baris);
                 }
 

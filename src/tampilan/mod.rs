@@ -9,6 +9,7 @@ mod interaksi;
 mod pemantauan;
 mod pengukuran;
 mod render;
+mod render_grid;
 
 use std::time::Duration;
 
