@@ -8,7 +8,7 @@
 use gpui::{Context, CursorStyle, MouseButton, div, prelude::*, px, rgb};
 
 use super::JendelaTerminal;
-use crate::tema::{WARNA_LATAR, WARNA_TEKS};
+use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
 
@@ -97,7 +97,29 @@ impl JendelaTerminal {
                         )
                         .child(div().whitespace_nowrap().child(sesudah));
                 } else {
-                    elemen_baris = elemen_baris.child(self.masukan.tampilkan(&baris.teks));
+                    let (sebelum, sesudah) = self.masukan.bagian_kursor();
+
+                    let teks_sebelum = format!("{}{}", baris.teks, sebelum);
+
+                    let kursor = div()
+                        .relative()
+                        .w(px(0.0))
+                        .h(px(18.0))
+                        .flex_shrink_0()
+                        .child(
+                            div()
+                                .absolute()
+                                .left(px(0.0))
+                                .top(px(1.0))
+                                .w(px(2.0))
+                                .h(px(16.0))
+                                .bg(rgb(WARNA_AKSEN)),
+                        );
+
+                    elemen_baris = elemen_baris
+                        .child(div().whitespace_nowrap().child(teks_sebelum))
+                        .child(kursor)
+                        .child(div().whitespace_nowrap().child(sesudah.to_string()));
                 }
             } else {
                 let batas = baris

@@ -24,6 +24,12 @@ impl MasukanTerminal {
         self.posisi
     }
 
+    pub fn bagian_kursor(&self) -> (&str, &str) {
+        let indeks = self.indeks_byte(self.posisi);
+
+        self.teks.split_at(indeks)
+    }
+
     fn indeks_byte(&self, posisi: usize) -> usize {
         self.teks
             .char_indices()
