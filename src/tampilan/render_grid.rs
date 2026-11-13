@@ -14,7 +14,10 @@ const WARNA_SELEKSI: u32 = 0x493663;
 
 impl JendelaTerminal {
     pub(super) fn mode_grid_aktif(&self) -> bool {
-        std::env::var("WAIFUJAHAT_RENDER_GRID").is_ok_and(|nilai| nilai == "1")
+        match std::env::var("WAIFUJAHAT_RENDER_GRID") {
+            Ok(nilai) => nilai == "1",
+            Err(_) => true,
+        }
     }
 
     pub(super) fn baris_seleksi(&self) -> Vec<String> {
