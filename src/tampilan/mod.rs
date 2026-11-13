@@ -11,7 +11,7 @@ mod pengukuran;
 mod render;
 mod render_grid;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window};
 use waifujahat_terminal::terminal::{
@@ -26,10 +26,13 @@ pub(crate) struct JendelaTerminal {
     motor: MotorTerminal,
     sesi: Option<SesiTerminal>,
     status: String,
+    batas_status_salin: Option<Instant>,
     perintah_berjalan: bool,
     indeks_baris_sebelum_perintah: usize,
     riwayat: RiwayatPerintah,
     seleksi: SeleksiTerminal,
+    arah_gulir_seleksi: i8,
+    kolom_gulir_seleksi: usize,
     ukuran_pty: (u16, u16),
     _pengamat_ukuran: Subscription,
     _tugas_pantau: Task<()>,
@@ -74,10 +77,13 @@ impl JendelaTerminal {
             motor: MotorTerminal::baru(80, 24),
             sesi,
             status,
+            batas_status_salin: None,
             perintah_berjalan: false,
             indeks_baris_sebelum_perintah: 0,
             riwayat: RiwayatPerintah::baru(),
             seleksi: SeleksiTerminal::baru(),
+            arah_gulir_seleksi: 0,
+            kolom_gulir_seleksi: 0,
             ukuran_pty: (80, 24),
             _pengamat_ukuran: pengamat_ukuran,
             _tugas_pantau: tugas_pantau,

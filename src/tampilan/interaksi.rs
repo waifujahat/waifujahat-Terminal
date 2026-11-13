@@ -13,6 +13,8 @@ use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal};
 
 use super::JendelaTerminal;
 
+use std::time::{Duration, Instant};
+
 impl JendelaTerminal {
     fn posisi_dari_mouse(
         &self,
@@ -21,6 +23,20 @@ impl JendelaTerminal {
     ) -> Option<PosisiSeleksi> {
         let baris = self.baris_seleksi();
 
+        let mode_grid = self.mode_grid_aktif();
+
+        let indeks_awal = if mode_grid {
+            self.motor.indeks_awal_tampilan()
+        } else {
+            0
+        };
+
+        let jumlah_terlihat = if mode_grid {
+            self.motor.ukuran().1
+        } else {
+            baris.len()
+        };
+
         if baris.is_empty() {
             return None;
         }
@@ -28,7 +44,7 @@ impl JendelaTerminal {
         let offset = self.gulir.offset();
         let mut indeks_baris = 0;
 
-        for indeks in 0..baris.len() {
+        for indeks in 0..jumlah_terlihat {
             let Some(batas) = self.gulir.bounds_for_item(indeks) else {
                 continue;
             };
@@ -48,10 +64,11 @@ impl JendelaTerminal {
         }
 
         let batas = self.gulir.bounds_for_item(indeks_baris)?;
-        let teks = &baris[indeks_baris];
+        let indeks_seleksi = indeks_awal + indeks_baris;
+        let teks = baris.get(indeks_seleksi)?;
 
         if teks.is_empty() {
-            return Some(PosisiSeleksi::baru(indeks_baris, 0));
+            return Some(PosisiSeleksi::baru(indeks_seleksi, 0));
         }
 
         let font = Font {
@@ -80,7 +97,7 @@ impl JendelaTerminal {
             .take_while(|(indeks, _)| *indeks < indeks_byte)
             .count();
 
-        Some(PosisiSeleksi::baru(indeks_baris, kolom))
+        Some(PosisiSeleksi::baru(indeks_seleksi, kolom))
     }
 
     pub(super) fn mouse_ditekan(
@@ -90,6 +107,7 @@ impl JendelaTerminal {
         konteks: &mut Context<Self>,
     ) {
         jendela.focus(&self.fokus, konteks);
+        self.arah_gulir_seleksi = 0;
 
         let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) else {
             self.seleksi.bersihkan();
@@ -115,7 +133,6 @@ impl JendelaTerminal {
 
         konteks.notify();
     }
-
     pub(super) fn mouse_digerakkan(
         &mut self,
         kejadian: &MouseMoveEvent,
@@ -123,15 +140,41 @@ impl JendelaTerminal {
         konteks: &mut Context<Self>,
     ) {
         if !self.seleksi.sedang_memilih() {
+            self.arah_gulir_seleksi = 0;
             return;
         }
 
         if kejadian.pressed_button != Some(MouseButton::Left) {
+            self.arah_gulir_seleksi = 0;
             self.seleksi.selesai();
             return;
         }
 
+        if self.mode_grid_aktif() {
+            let offset = self.gulir.offset().y;
+            let tinggi = self.motor.ukuran().1;
+
+            let batas_atas = self
+                .gulir
+                .bounds_for_item(0)
+                .map(|batas| batas.top() + offset);
+
+            let batas_bawah = self
+                .gulir
+                .bounds_for_item(tinggi.saturating_sub(1))
+                .map(|batas| batas.bottom() + offset);
+
+            self.arah_gulir_seleksi = match (batas_atas, batas_bawah) {
+                (Some(atas), _) if kejadian.position.y < atas => 1,
+                (_, Some(bawah)) if kejadian.position.y > bawah => -1,
+                _ => 0,
+            };
+        } else {
+            self.arah_gulir_seleksi = 0;
+        }
+
         if let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) {
+            self.kolom_gulir_seleksi = posisi.kolom;
             self.seleksi.perbarui(posisi);
             konteks.notify();
         }
@@ -147,6 +190,8 @@ impl JendelaTerminal {
         konteks.write_to_clipboard(ClipboardItem::new_string(teks));
 
         self.status = "Copy".into();
+        self.batas_status_salin = Some(Instant::now() + Duration::from_secs(3));
+
         konteks.notify();
     }
 
@@ -160,6 +205,13 @@ impl JendelaTerminal {
         if self.mode_grid_aktif() {
             self.motor.kembali_ke_bawah();
         }
+
+        if teks.is_empty() {
+            return;
+        }
+
+        self.status = "Paste".into();
+        self.batas_status_salin = Some(Instant::now() + Duration::from_secs(3));
 
         if self.perintah_berjalan {
             self.kirim_input_langsung(TombolTerminal::Teks(&teks));
@@ -256,6 +308,31 @@ impl JendelaTerminal {
         konteks: &mut Context<Self>,
     ) {
         let tombol = &kejadian.keystroke;
+
+        if self.mode_grid_aktif()
+            && tombol.modifiers.shift
+            && !tombol.modifiers.control
+            && !tombol.modifiers.platform
+            && !tombol.modifiers.alt
+        {
+            let tinggi = self.motor.ukuran().1;
+            let jumlah_baris = tinggi.saturating_sub(1).max(1);
+            let langkah = isize::try_from(jumlah_baris).unwrap_or(isize::MAX);
+
+            let perpindahan = match tombol.key.to_ascii_lowercase().as_str() {
+                "pageup" | "page-up" | "page_up" => langkah,
+                "pagedown" | "page-down" | "page_down" => -langkah,
+                _ => 0,
+            };
+
+            if perpindahan != 0 {
+                self.motor.geser_riwayat(perpindahan);
+                self.seleksi.bersihkan();
+
+                konteks.notify();
+                return;
+            }
+        }
 
         if tombol.modifiers.control || tombol.modifiers.platform {
             match tombol.key.to_ascii_lowercase().as_str() {

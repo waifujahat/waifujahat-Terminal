@@ -6,9 +6,11 @@
  */
 
 use gpui::Context;
-use waifujahat_terminal::terminal::{PesanTerminal, SesiTerminal};
+use waifujahat_terminal::terminal::{PesanTerminal, PosisiSeleksi, SesiTerminal};
 
 use super::JendelaTerminal;
+
+use std::time::Instant;
 
 impl JendelaTerminal {
     fn prompt_powershell_terlihat(&self) -> bool {
@@ -74,6 +76,40 @@ impl JendelaTerminal {
                 }
 
                 None => break,
+            }
+        }
+
+        if self.mode_grid_aktif() && self.seleksi.sedang_memilih() && self.arah_gulir_seleksi != 0 {
+            let offset_sebelum = self.motor.offset_riwayat();
+
+            self.motor
+                .geser_riwayat(isize::from(self.arah_gulir_seleksi));
+
+            if self.motor.offset_riwayat() != offset_sebelum {
+                let indeks_awal = self.motor.indeks_awal_tampilan();
+                let tinggi = self.motor.ukuran().1;
+
+                let indeks_baris = if self.arah_gulir_seleksi > 0 {
+                    indeks_awal
+                } else {
+                    indeks_awal + tinggi.saturating_sub(1)
+                };
+
+                self.seleksi
+                    .perbarui(PosisiSeleksi::baru(indeks_baris, self.kolom_gulir_seleksi));
+
+                berubah = true;
+            }
+        }
+
+        if let Some(batas) = self.batas_status_salin
+            && Instant::now() >= batas
+        {
+            self.batas_status_salin = None;
+
+            if matches!(self.status.as_str(), "Copy" | "Paste") {
+                self.status.clear();
+                berubah = true;
             }
         }
 
