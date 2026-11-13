@@ -228,11 +228,13 @@ impl Render for JendelaTerminal {
                 .text_xs()
                 .text_color(rgb(WARNA_AKSEN))
                 .child(self.status.clone())
-                .child(if self.perintah_berjalan {
-                    "Running - Esc untuk membatalkan"
-                } else {
-                    "Ready"
-                }),
+                .child(
+                    if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
+                        "Running - Esc untuk membatalkan"
+                    } else {
+                        "Ready"
+                    },
+                ),
         )
     }
 }

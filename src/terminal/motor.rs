@@ -84,6 +84,10 @@ impl MotorTerminal {
         self.terminal.mode().contains(TermMode::SHOW_CURSOR)
     }
 
+    pub fn layar_alternatif_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::ALT_SCREEN)
+    }
+
     pub fn jumlah_baris_riwayat(&self) -> usize {
         self.terminal.grid().history_size()
     }

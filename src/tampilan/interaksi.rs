@@ -213,7 +213,7 @@ impl JendelaTerminal {
         self.status = "Paste".into();
         self.batas_status_salin = Some(Instant::now() + Duration::from_secs(3));
 
-        if self.perintah_berjalan {
+        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
             self.kirim_input_langsung(TombolTerminal::Teks(&teks));
         } else {
             self.masukan.sisipkan(&teks);
@@ -365,7 +365,7 @@ impl JendelaTerminal {
             self.seleksi.bersihkan();
         }
 
-        if self.perintah_berjalan {
+        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
             match tombol.key.to_ascii_lowercase().as_str() {
                 "escape" | "esc" => {
                     self.proses_escape();
