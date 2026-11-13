@@ -28,6 +28,7 @@ impl JendelaTerminal {
         let mut baris: Vec<String> = snapshot.baris.into_iter().map(|baris| baris.teks).collect();
 
         if !self.perintah_berjalan
+            && self.motor.offset_riwayat() == 0
             && let Some(teks) = baris.get_mut(indeks_kursor)
         {
             teks.push_str(self.masukan.teks());
@@ -40,6 +41,7 @@ impl JendelaTerminal {
         let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
         let kursor_terlihat = snapshot.kursor_terlihat;
         let jumlah_kolom = snapshot.kolom;
+        let sedang_melihat_riwayat = self.motor.offset_riwayat() > 0;
 
         let mut keluaran = div()
             .id("keluaran-grid")
@@ -51,6 +53,30 @@ impl JendelaTerminal {
             .overflow_y_scroll()
             .track_scroll(&self.gulir)
             .cursor(CursorStyle::IBeam)
+            .on_scroll(
+                konteks.listener(|terminal, kejadian: &gpui::ScrollEvent, _, konteks| {
+                    let delta = kejadian.delta.pixel_delta(px(18.0));
+                    let jarak = f32::from(delta.y);
+
+                    if jarak == 0.0 {
+                        return;
+                    }
+
+                    let jumlah = (jarak / 18.0).round() as isize;
+
+                    let jumlah = if jumlah == 0 {
+                        jarak.signum() as isize
+                    } else {
+                        jumlah
+                    };
+
+                    terminal.motor.geser_riwayat(jumlah);
+                    terminal.seleksi.bersihkan();
+
+                    konteks.stop_propagation();
+                    konteks.notify();
+                }),
+            )
             .on_mouse_down(
                 MouseButton::Left,
                 konteks.listener(|terminal, kejadian, jendela, konteks| {
@@ -60,10 +86,13 @@ impl JendelaTerminal {
             );
 
         for (indeks, baris) in snapshot.baris.into_iter().enumerate() {
-            let editor_aktif = indeks == baris_kursor && !self.perintah_berjalan;
+            let editor_aktif =
+                !sedang_melihat_riwayat && indeks == baris_kursor && !self.perintah_berjalan;
 
-            let kursor_program_aktif =
-                self.perintah_berjalan && kursor_terlihat && indeks == baris_kursor;
+            let kursor_program_aktif = !sedang_melihat_riwayat
+                && self.perintah_berjalan
+                && kursor_terlihat
+                && indeks == baris_kursor;
 
             let mut teks_seleksi = baris.teks.clone();
 

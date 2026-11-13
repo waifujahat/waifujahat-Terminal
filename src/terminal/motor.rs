@@ -11,7 +11,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use alacritty_terminal::{
     event::{Event, EventListener},
-    grid::Dimensions,
+    grid::{Dimensions, Scroll},
     index::{Column, Line},
     term::{
         Config, Term, TermMode,
@@ -84,6 +84,63 @@ impl MotorTerminal {
         self.terminal.mode().contains(TermMode::SHOW_CURSOR)
     }
 
+    pub fn jumlah_baris_riwayat(&self) -> usize {
+        self.terminal.grid().history_size()
+    }
+
+    pub fn baris_riwayat(&self, indeks: usize) -> Option<String> {
+        let grid = self.terminal.grid();
+        let jumlah_riwayat = grid.history_size();
+
+        if indeks >= jumlah_riwayat {
+            return None;
+        }
+
+        let jarak = jumlah_riwayat - indeks;
+        let nomor_baris = i32::try_from(jarak).ok()?;
+        let baris = &grid[Line(-nomor_baris)];
+
+        let mut teks = String::new();
+
+        for kolom in 0..self.terminal.columns() {
+            let sel = &baris[Column(kolom)];
+
+            if sel.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                continue;
+            }
+
+            teks.push(sel.c);
+
+            if let Some(tambahan) = sel.zerowidth() {
+                teks.extend(tambahan.iter().copied());
+            }
+        }
+
+        Some(teks.trim_end_matches(' ').to_string())
+    }
+
+    pub fn offset_riwayat(&self) -> usize {
+        self.terminal.grid().display_offset()
+    }
+
+    pub fn geser_riwayat(&mut self, jumlah: isize) {
+        let jumlah = i32::try_from(jumlah).unwrap_or_else(|_| {
+            if jumlah.is_negative() {
+                i32::MIN
+            } else {
+                i32::MAX
+            }
+        });
+
+        if jumlah != 0 {
+            self.terminal.scroll_display(Scroll::Delta(jumlah));
+        }
+    }
+
+    pub fn kembali_ke_bawah(&mut self) {
+        self.terminal.scroll_display(Scroll::Bottom);
+    }
+
     pub fn sel(&self, baris: usize, kolom: usize) -> Option<&Cell> {
         let (jumlah_kolom, jumlah_baris) = self.ukuran();
 
@@ -91,7 +148,10 @@ impl MotorTerminal {
             return None;
         }
 
-        Some(&self.terminal.grid()[Line(baris as i32)][Column(kolom)])
+        let offset = i32::try_from(self.offset_riwayat()).ok()?;
+        let indeks = i32::try_from(baris).ok()?.checked_sub(offset)?;
+
+        Some(&self.terminal.grid()[Line(indeks)][Column(kolom)])
     }
 
     pub fn baris_layar(&self) -> Vec<String> {
