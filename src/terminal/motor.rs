@@ -88,6 +88,10 @@ impl MotorTerminal {
         self.terminal.mode().contains(TermMode::ALT_SCREEN)
     }
 
+    pub fn tempel_berbingkai_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     pub fn pelaporan_mouse_aktif(&self) -> bool {
         self.terminal.mode().intersects(TermMode::MOUSE_MODE)
     }

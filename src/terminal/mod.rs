@@ -13,6 +13,7 @@ mod riwayat;
 mod seleksi;
 mod sesi;
 mod snapshot;
+mod tempel;
 mod tombol;
 mod warna;
 
@@ -24,5 +25,6 @@ pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};
 pub use snapshot::{BarisSnapshot, SelSnapshot, SnapshotTerminal};
+pub use tempel::sandi_tempel;
 pub use tombol::TombolTerminal;
 pub use warna::PotonganWarna;
