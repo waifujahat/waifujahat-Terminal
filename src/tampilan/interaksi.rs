@@ -217,7 +217,8 @@ impl JendelaTerminal {
             self.motor.kembali_ke_bawah();
         }
 
-        let aplikasi_interaktif = self.perintah_berjalan || self.motor.layar_alternatif_aktif();
+        let aplikasi_interaktif =
+            self.perintah_berjalan || self.motor.layar_alternatif_aktif() || self.mode_input_shell;
 
         if aplikasi_interaktif {
             let Some(sesi) = &self.sesi else {
@@ -272,6 +273,30 @@ impl JendelaTerminal {
 
         self.perintah_berjalan = !perintah.trim().is_empty();
         self.riwayat.catat(perintah);
+        self.seleksi.bersihkan();
+        self.status.clear();
+    }
+
+    fn kirim_perintah_shell(&mut self) {
+        let Some(sesi) = &self.sesi else {
+            self.status = "Sesi PowerShell tidak tersedia".into();
+            return;
+        };
+
+        let indeks_baris = self
+            .layar
+            .baris()
+            .iter()
+            .rposition(|baris| !baris.trim().is_empty())
+            .unwrap_or(0);
+
+        if let Err(kesalahan) = sesi.kirim_tombol(TombolTerminal::Enter) {
+            self.status = format!("Gagal mengirim Enter: {kesalahan}");
+            return;
+        }
+
+        self.indeks_baris_sebelum_perintah = indeks_baris;
+        self.perintah_berjalan = true;
         self.seleksi.bersihkan();
         self.status.clear();
     }
@@ -363,7 +388,12 @@ impl JendelaTerminal {
                 match tombol.key.to_ascii_lowercase().as_str() {
                     "y" => {
                         self.menunggu_konfirmasi_perintah = false;
-                        self.kirim_perintah();
+
+                        if self.mode_input_shell {
+                            self.kirim_perintah_shell();
+                        } else {
+                            self.kirim_perintah();
+                        }
                         self.gulir.scroll_to_bottom();
                         konteks.notify();
                         return;
@@ -371,6 +401,11 @@ impl JendelaTerminal {
 
                     "n" | "escape" | "esc" => {
                         self.menunggu_konfirmasi_perintah = false;
+
+                        if self.mode_input_shell {
+                            self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
+                        }
+
                         self.status = "Perintah tidak dijalankan".into();
                         konteks.notify();
                         return;
@@ -414,7 +449,9 @@ impl JendelaTerminal {
         }
 
         if tombol.modifiers.control || tombol.modifiers.platform {
-            let aplikasi_interaktif = self.perintah_berjalan || self.motor.layar_alternatif_aktif();
+            let aplikasi_interaktif = self.perintah_berjalan
+                || self.motor.layar_alternatif_aktif()
+                || self.mode_input_shell;
 
             match tombol.key.to_ascii_lowercase().as_str() {
                 "c" => {
@@ -449,6 +486,19 @@ impl JendelaTerminal {
                     }
                 }
 
+                "m" | "j"
+                    if self.mode_input_shell
+                        && !self.perintah_berjalan
+                        && !self.motor.layar_alternatif_aktif() =>
+                {
+                    if self.konfirmasi_perintah_aktif {
+                        self.menunggu_konfirmasi_perintah = true;
+                        self.status.clear();
+                    } else {
+                        self.kirim_perintah_shell();
+                    }
+                }
+
                 _ if aplikasi_interaktif && tombol.modifiers.control && !tombol.modifiers.alt => {
                     let mut karakter = tombol.key.chars();
 
@@ -476,18 +526,26 @@ impl JendelaTerminal {
             self.seleksi.bersihkan();
         }
 
-        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
+        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() || self.mode_input_shell {
             match tombol.key.to_ascii_lowercase().as_str() {
                 "escape" | "esc" => {
-                    if self.motor.layar_alternatif_aktif() {
-                        self.kirim_input_langsung(TombolTerminal::Escape);
-                    } else {
-                        self.proses_escape();
-                    }
+                    self.kirim_input_langsung(TombolTerminal::Escape);
                 }
 
                 "enter" => {
-                    self.kirim_input_langsung(TombolTerminal::Enter);
+                    if self.mode_input_shell
+                        && !self.perintah_berjalan
+                        && !self.motor.layar_alternatif_aktif()
+                    {
+                        if self.konfirmasi_perintah_aktif {
+                            self.menunggu_konfirmasi_perintah = true;
+                            self.status.clear();
+                        } else {
+                            self.kirim_perintah_shell();
+                        }
+                    } else {
+                        self.kirim_input_langsung(TombolTerminal::Enter);
+                    }
                 }
 
                 "tab" | "backtab" => {

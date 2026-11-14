@@ -29,6 +29,7 @@ impl JendelaTerminal {
 
         if !self.perintah_berjalan
             && !self.motor.layar_alternatif_aktif()
+            && !self.mode_input_shell
             && self.motor.offset_riwayat() == 0
         {
             let indeks_editor = self.motor.jumlah_baris_riwayat() + self.motor.posisi_kursor().0;
@@ -47,7 +48,8 @@ impl JendelaTerminal {
         let jumlah_kolom = snapshot.kolom;
         let indeks_awal_tampilan = self.motor.indeks_awal_tampilan();
         let sedang_melihat_riwayat = self.motor.offset_riwayat() > 0;
-        let aplikasi_interaktif = self.perintah_berjalan || self.motor.layar_alternatif_aktif();
+        let aplikasi_interaktif =
+            self.perintah_berjalan || self.motor.layar_alternatif_aktif() || self.mode_input_shell;
 
         let mut keluaran = div()
             .id("keluaran-grid")
