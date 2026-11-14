@@ -427,6 +427,12 @@ impl JendelaTerminal {
                         self.salin_seleksi(konteks);
                     } else if aplikasi_interaktif {
                         self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
+                    } else {
+                        self.masukan.bersihkan();
+                        self.selesai_navigasi_riwayat();
+                        self.seleksi.bersihkan();
+
+                        self.status = "Masukan dibatalkan".into();
                     }
                 }
 
@@ -435,11 +441,22 @@ impl JendelaTerminal {
                 }
 
                 "a" => {
-                    if self.motor.layar_alternatif_aktif() {
+                    if aplikasi_interaktif {
                         self.kirim_input_langsung(TombolTerminal::Kontrol('a'));
                     } else {
                         let baris = self.baris_seleksi();
                         self.seleksi.pilih_semua(&baris);
+                    }
+                }
+
+                _ if aplikasi_interaktif && tombol.modifiers.control && !tombol.modifiers.alt => {
+                    let mut karakter = tombol.key.chars();
+
+                    if let Some(huruf) = karakter.next()
+                        && karakter.next().is_none()
+                        && huruf.is_ascii_alphabetic()
+                    {
+                        self.kirim_input_langsung(TombolTerminal::Kontrol(huruf));
                     }
                 }
 
@@ -473,8 +490,15 @@ impl JendelaTerminal {
                     self.kirim_input_langsung(TombolTerminal::Enter);
                 }
 
-                "tab" => {
-                    self.kirim_input_langsung(TombolTerminal::Tab);
+                "tab" | "backtab" => {
+                    let tombol_tab =
+                        if tombol.modifiers.shift || tombol.key.eq_ignore_ascii_case("backtab") {
+                            TombolTerminal::TabMundur
+                        } else {
+                            TombolTerminal::Tab
+                        };
+
+                    self.kirim_input_langsung(tombol_tab);
                 }
 
                 "backspace" => {
