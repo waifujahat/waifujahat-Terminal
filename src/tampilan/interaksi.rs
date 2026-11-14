@@ -109,6 +109,10 @@ impl JendelaTerminal {
         jendela.focus(&self.fokus, konteks);
         self.arah_gulir_seleksi = 0;
 
+        if self.tangani_tekan_mouse_tui(kejadian, jendela, konteks) {
+            return;
+        }
+
         let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) else {
             self.seleksi.bersihkan();
             konteks.notify();
@@ -139,6 +143,10 @@ impl JendelaTerminal {
         jendela: &mut Window,
         konteks: &mut Context<Self>,
     ) {
+        if self.mouse_tui_ditekan.is_some() {
+            return;
+        }
+
         if !self.seleksi.sedang_memilih() {
             self.arah_gulir_seleksi = 0;
             return;
@@ -308,6 +316,61 @@ impl JendelaTerminal {
         konteks: &mut Context<Self>,
     ) {
         let tombol = &kejadian.keystroke;
+
+        if !self.perintah_berjalan
+            && !self.motor.layar_alternatif_aktif()
+            && tombol.key.eq_ignore_ascii_case("f8")
+            && !tombol.modifiers.control
+            && !tombol.modifiers.platform
+            && !tombol.modifiers.alt
+            && !tombol.modifiers.shift
+        {
+            self.konfirmasi_perintah_aktif = !self.konfirmasi_perintah_aktif;
+            self.menunggu_konfirmasi_perintah = false;
+
+            self.status = if self.konfirmasi_perintah_aktif {
+                "Konfirmasi perintah aktif"
+            } else {
+                "Konfirmasi perintah nonaktif"
+            }
+            .into();
+
+            konteks.notify();
+            return;
+        }
+
+        if self.menunggu_konfirmasi_perintah {
+            let tanpa_pengubah =
+                !tombol.modifiers.control && !tombol.modifiers.platform && !tombol.modifiers.alt;
+
+            if tanpa_pengubah {
+                match tombol.key.to_ascii_lowercase().as_str() {
+                    "y" => {
+                        self.menunggu_konfirmasi_perintah = false;
+                        self.kirim_perintah();
+                        self.gulir.scroll_to_bottom();
+                        konteks.notify();
+                        return;
+                    }
+
+                    "n" | "escape" | "esc" => {
+                        self.menunggu_konfirmasi_perintah = false;
+                        self.status = "Perintah tidak dijalankan".into();
+                        konteks.notify();
+                        return;
+                    }
+
+                    "enter" => {
+                        return;
+                    }
+
+                    _ => {}
+                }
+            }
+
+            self.menunggu_konfirmasi_perintah = false;
+            self.status.clear();
+        }
 
         if self.mode_grid_aktif()
             && tombol.modifiers.shift
@@ -480,7 +543,12 @@ impl JendelaTerminal {
             }
 
             "enter" => {
-                self.kirim_perintah();
+                if !self.konfirmasi_perintah_aktif || self.masukan.teks().trim().is_empty() {
+                    self.kirim_perintah();
+                } else {
+                    self.menunggu_konfirmasi_perintah = true;
+                    self.status.clear();
+                }
             }
 
             "escape" | "esc" => {
