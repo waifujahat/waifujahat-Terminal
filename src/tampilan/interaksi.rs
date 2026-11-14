@@ -9,7 +9,8 @@ use gpui::{
     ClipboardItem, Context, Font, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
     Pixels, Point, TextRun, Window, px, white,
 };
-use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal};
+
+use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal, sandi_tempel};
 
 use super::JendelaTerminal;
 
@@ -208,26 +209,41 @@ impl JendelaTerminal {
             return;
         };
 
-        let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
+        if teks.is_empty() {
+            return;
+        }
 
         if self.mode_grid_aktif() {
             self.motor.kembali_ke_bawah();
         }
 
-        if teks.is_empty() {
-            return;
-        }
+        let aplikasi_interaktif = self.perintah_berjalan || self.motor.layar_alternatif_aktif();
 
-        self.status = "Paste".into();
-        self.batas_status_salin = Some(Instant::now() + Duration::from_secs(3));
+        if aplikasi_interaktif {
+            let Some(sesi) = &self.sesi else {
+                self.status = "Sesi PowerShell tidak tersedia".into();
+                konteks.notify();
+                return;
+            };
 
-        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
-            self.kirim_input_langsung(TombolTerminal::Teks(&teks));
+            let berbingkai = self.motor.tempel_berbingkai_aktif();
+            let data = sandi_tempel(&teks, berbingkai);
+
+            if let Err(kesalahan) = sesi.kirim_bytes(&data) {
+                self.status = format!("Gagal menempel teks: {kesalahan}");
+                konteks.notify();
+                return;
+            }
         } else {
+            let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
+
             self.masukan.sisipkan(&teks);
             self.selesai_navigasi_riwayat();
             self.seleksi.bersihkan();
         }
+
+        self.status = "Paste".into();
+        self.batas_status_salin = Some(Instant::now() + Duration::from_secs(3));
 
         self.gulir.scroll_to_bottom();
         konteks.notify();
@@ -329,9 +345,9 @@ impl JendelaTerminal {
             self.menunggu_konfirmasi_perintah = false;
 
             self.status = if self.konfirmasi_perintah_aktif {
-                "Konfirmasi perintah aktif"
+                "Konfirmasi menjalankan perintah diaktifkan"
             } else {
-                "Konfirmasi perintah nonaktif"
+                "Konfirmasi menjalankan perintah dinonaktifkan"
             }
             .into();
 
