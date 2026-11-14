@@ -34,7 +34,7 @@ impl JendelaTerminal {
 
         baris.truncate(indeks_akhir + 1);
 
-        if !self.perintah_berjalan {
+        if !self.perintah_berjalan && !self.mode_input_shell {
             baris[indeks_editor].push_str(self.masukan.teks());
         }
 
@@ -88,7 +88,7 @@ impl JendelaTerminal {
         for (indeks, teks) in baris.into_iter().enumerate() {
             let baris_editor = indeks == indeks_editor;
 
-            let tampilan = if baris_editor && !self.perintah_berjalan {
+            let tampilan = if baris_editor && !self.perintah_berjalan && !self.mode_input_shell {
                 self.masukan.tampilkan(&awalan)
             } else if teks.is_empty() {
                 " ".to_string()
@@ -121,7 +121,7 @@ impl JendelaTerminal {
                             .child(dipilih),
                     )
                     .child(div().whitespace_nowrap().child(sesudah));
-            } else if !baris_editor || self.perintah_berjalan {
+            } else if !baris_editor || self.perintah_berjalan || self.mode_input_shell {
                 let indeks_motor = indeks.checked_sub(pergeseran);
 
                 let baris_cocok = indeks_motor
@@ -237,9 +237,9 @@ impl Render for JendelaTerminal {
                 } else if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
                     "Running - Esc untuk membatalkan"
                 } else if self.konfirmasi_perintah_aktif {
-                    "Konfirmasi : ON (Tekan F8)"
+                    "Toogle Konfirmasi : ON (Tekan F8)"
                 } else {
-                    "Konfirmasi : OFF (Tekan F8)"
+                    "Toogle Konfirmasi : OFF (Tekan F8)"
                 }),
         )
     }
