@@ -6,6 +6,7 @@
  */
 
 mod interaksi;
+mod interaksi_mouse;
 mod pemantauan;
 mod pengukuran;
 mod render;
@@ -28,11 +29,14 @@ pub(crate) struct JendelaTerminal {
     status: String,
     batas_status_salin: Option<Instant>,
     perintah_berjalan: bool,
+    menunggu_konfirmasi_perintah: bool,
+    konfirmasi_perintah_aktif: bool,
     indeks_baris_sebelum_perintah: usize,
     riwayat: RiwayatPerintah,
     seleksi: SeleksiTerminal,
     arah_gulir_seleksi: i8,
     kolom_gulir_seleksi: usize,
+    mouse_tui_ditekan: Option<(usize, usize)>,
     ukuran_pty: (u16, u16),
     _pengamat_ukuran: Subscription,
     _tugas_pantau: Task<()>,
@@ -79,11 +83,14 @@ impl JendelaTerminal {
             status,
             batas_status_salin: None,
             perintah_berjalan: false,
+            menunggu_konfirmasi_perintah: false,
+            konfirmasi_perintah_aktif: true,
             indeks_baris_sebelum_perintah: 0,
             riwayat: RiwayatPerintah::baru(),
             seleksi: SeleksiTerminal::baru(),
             arah_gulir_seleksi: 0,
             kolom_gulir_seleksi: 0,
+            mouse_tui_ditekan: None,
             ukuran_pty: (80, 24),
             _pengamat_ukuran: pengamat_ukuran,
             _tugas_pantau: tugas_pantau,

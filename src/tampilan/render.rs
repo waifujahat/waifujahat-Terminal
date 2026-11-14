@@ -185,14 +185,14 @@ impl Render for JendelaTerminal {
             }))
             .on_mouse_up(
                 MouseButton::Left,
-                konteks.listener(|terminal, _, _, _| {
-                    terminal.seleksi.selesai();
+                konteks.listener(|terminal, kejadian, jendela, konteks| {
+                    terminal.tangani_lepas_mouse_tui(kejadian, jendela, konteks);
                 }),
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                konteks.listener(|terminal, _, _, _| {
-                    terminal.seleksi.selesai();
+                konteks.listener(|terminal, kejadian, jendela, konteks| {
+                    terminal.tangani_lepas_mouse_tui(kejadian, jendela, konteks);
                 }),
             )
             .size_full()
@@ -227,14 +227,20 @@ impl Render for JendelaTerminal {
                 .justify_between()
                 .text_xs()
                 .text_color(rgb(WARNA_AKSEN))
-                .child(self.status.clone())
-                .child(
-                    if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
-                        "Running - Esc untuk membatalkan"
-                    } else {
-                        "Ready"
-                    },
-                ),
+                .child(if self.menunggu_konfirmasi_perintah {
+                    "Apakah input sudah benar?".to_string()
+                } else {
+                    self.status.clone()
+                })
+                .child(if self.menunggu_konfirmasi_perintah {
+                    "Tekan Y : Ya | N/Esc : Batal"
+                } else if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
+                    "Running - Esc untuk membatalkan"
+                } else if self.konfirmasi_perintah_aktif {
+                    "Konfirmasi : ON (Tekan F8)"
+                } else {
+                    "Konfirmasi : OFF (Tekan F8)"
+                }),
         )
     }
 }

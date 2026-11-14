@@ -8,6 +8,7 @@
 mod layar;
 mod masukan;
 mod motor;
+mod mouse;
 mod riwayat;
 mod seleksi;
 mod sesi;
@@ -18,6 +19,7 @@ mod warna;
 pub use layar::LayarTerminal;
 pub use masukan::MasukanTerminal;
 pub use motor::MotorTerminal;
+pub use mouse::{AksiMouse, PengubahMouse, TombolMouse, sandi_mouse_sgr};
 pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};

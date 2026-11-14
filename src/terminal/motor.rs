@@ -88,6 +88,22 @@ impl MotorTerminal {
         self.terminal.mode().contains(TermMode::ALT_SCREEN)
     }
 
+    pub fn pelaporan_mouse_aktif(&self) -> bool {
+        self.terminal.mode().intersects(TermMode::MOUSE_MODE)
+    }
+
+    pub fn mouse_sgr_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::SGR_MOUSE)
+    }
+
+    pub fn pelaporan_drag_mouse_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::MOUSE_DRAG)
+    }
+
+    pub fn pelaporan_gerakan_mouse_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::MOUSE_MOTION)
+    }
+
     pub fn jumlah_baris_riwayat(&self) -> usize {
         self.terminal.grid().history_size()
     }
