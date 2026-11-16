@@ -36,7 +36,7 @@ pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};
 pub use snapshot::{BarisSnapshot, SelSnapshot, SnapshotTerminal};
-pub use susunan_panel::{ArahPanel, SimpulPanel, SusunanPanel};
+pub use susunan_panel::{ArahPanel, CabangPanel, SimpulPanel, SusunanPanel};
 pub use tempel::sandi_tempel;
 pub use tombol::TombolTerminal;
 pub use warna::PotonganWarna;

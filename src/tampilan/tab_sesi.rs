@@ -5,7 +5,7 @@
  * Purpose: Renders interactive terminal session tabs
  */
 
-use gpui::{Context, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, CursorStyle, MouseButton, div, prelude::*, px, rgb};
 
 use super::JendelaTerminal;
 
@@ -97,6 +97,43 @@ impl JendelaTerminal {
                         terminal.tambah_sesi(jendela, konteks);
 
                         konteks.stop_propagation();
+                    }),
+                ),
+        );
+
+        daftar = daftar.child(
+            div()
+                .id("tombol-menu-split")
+                .h(px(22.0))
+                .px_2()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgb(WARNA_TAB_NONAKTIF))
+                .text_color(rgb(WARNA_AKSEN))
+                .cursor(CursorStyle::PointingHand)
+                .hover(|gaya| gaya.bg(rgb(WARNA_TAB_AKTIF)))
+                .child("Split ▾")
+                .on_mouse_down(
+                    MouseButton::Left,
+                    konteks.listener(|terminal, kejadian: &gpui::MouseDownEvent, _, konteks| {
+                        konteks.stop_propagation();
+
+                        if terminal.ruang().mouse_tui_ditekan.is_some() {
+                            return;
+                        }
+
+                        terminal.ruang_mut().keadaan.seleksi.selesai();
+                        terminal.ruang_mut().arah_gulir_seleksi = 0;
+
+                        terminal.menu_split = if terminal.menu_split.is_some() {
+                            None
+                        } else {
+                            Some(kejadian.position.x)
+                        };
+
+                        konteks.notify();
                     }),
                 ),
         );

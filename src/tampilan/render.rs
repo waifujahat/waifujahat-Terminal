@@ -10,7 +10,10 @@ use gpui::{
     rgb, rgba,
 };
 
+use waifujahat_terminal::terminal::IdSesi;
+
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
+
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
@@ -41,7 +44,11 @@ impl RuangSesi {
         baris
     }
 
-    fn buat_keluaran_terminal(&self, konteks: &mut Context<JendelaTerminal>) -> impl IntoElement {
+    pub(super) fn buat_keluaran_terminal(
+        &self,
+        id: IdSesi,
+        konteks: &mut Context<JendelaTerminal>,
+    ) -> impl IntoElement {
         let baris = self.baris_terminal();
         let jumlah_baris = baris.len();
 
@@ -50,7 +57,7 @@ impl RuangSesi {
         let pergeseran = jumlah_baris.saturating_sub(baris_motor.len());
 
         let mut keluaran = div()
-            .id("keluaran-terminal")
+            .id(format!("keluaran-terminal-{}", id.nilai()))
             .w_full()
             .flex_1()
             .min_h_0()
@@ -61,8 +68,8 @@ impl RuangSesi {
             .cursor(CursorStyle::IBeam)
             .on_mouse_down(
                 MouseButton::Left,
-                konteks.listener(|terminal, kejadian, jendela, konteks| {
-                    terminal.mouse_ditekan(kejadian, jendela, konteks);
+                konteks.listener(move |terminal, kejadian, jendela, konteks| {
+                    terminal.mouse_ditekan_panel(id, kejadian, jendela, konteks);
                     konteks.stop_propagation();
                 }),
             );
@@ -140,9 +147,7 @@ impl Render for JendelaTerminal {
             .join("images")
             .join("demo.jpg");
 
-        let mode_grid = self.ruang().mode_grid_aktif();
-
-        let mut halaman = div()
+        let halaman = div()
             .id("jendela-terminal")
             .relative()
             .overflow_hidden()
@@ -151,6 +156,10 @@ impl Render for JendelaTerminal {
             .on_mouse_down(
                 MouseButton::Left,
                 konteks.listener(|terminal, _, jendela, konteks| {
+                    if terminal.tarikan_panel.is_some() {
+                        return;
+                    }
+
                     jendela.focus(&terminal.fokus, konteks);
                     terminal.ruang_mut().keadaan.seleksi.bersihkan();
                     konteks.notify();
@@ -191,34 +200,40 @@ impl Render for JendelaTerminal {
             .child(div().absolute().inset_0().bg(rgba(0x090d18b3)))
             .child(self.buat_tab_sesi(konteks));
 
-        if mode_grid {
-            halaman = halaman.child(self.ruang().buat_keluaran_grid(jendela, konteks));
-        } else {
-            halaman = halaman.child(self.ruang().buat_keluaran_terminal(konteks));
+        let mut halaman = halaman
+            .child(self.buat_panel_terminal(jendela, konteks))
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .text_xs()
+                    .text_color(rgb(WARNA_AKSEN))
+                    .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
+                        "Apakah input sudah benar?".to_string()
+                    } else {
+                        self.ruang().status.clone()
+                    })
+                    .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
+                        "Tekan Y : Ya | N/Esc : Batal"
+                    } else if self.ruang().keadaan.siklus.berjalan()
+                        || self.ruang().keadaan.motor.layar_alternatif_aktif()
+                    {
+                        "Running - Esc untuk membatalkan"
+                    } else if self.ruang().keadaan.siklus.konfirmasi_aktif() {
+                        "Toggle Konfirmasi : ON (Tekan F8)"
+                    } else {
+                        "Toggle Konfirmasi : OFF (Tekan F8)"
+                    }),
+            );
+
+        if let Some(posisi) = self.menu_split {
+            halaman = halaman.child(self.buat_menu_split(posisi, jendela, konteks));
         }
 
-        halaman.child(
-            div()
-                .flex()
-                .justify_between()
-                .text_xs()
-                .text_color(rgb(WARNA_AKSEN))
-                .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
-                    "Apakah input sudah benar?".to_string()
-                } else {
-                    self.ruang().status.clone()
-                })
-                .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
-                    "Tekan Y : Ya | N/Esc : Batal"
-                } else if self.ruang().keadaan.siklus.berjalan()
-                    || self.ruang().keadaan.motor.layar_alternatif_aktif()
-                {
-                    "Running - Esc untuk membatalkan"
-                } else if self.ruang().keadaan.siklus.konfirmasi_aktif() {
-                    "Toggle Konfirmasi : ON (Tekan F8)"
-                } else {
-                    "Toggle Konfirmasi : OFF (Tekan F8)"
-                }),
-        )
+        if let Some(lapisan) = self.buat_lapisan_tarikan_panel(konteks) {
+            halaman = halaman.child(lapisan);
+        }
+
+        halaman
     }
 }

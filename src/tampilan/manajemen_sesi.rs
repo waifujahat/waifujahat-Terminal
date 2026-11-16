@@ -9,7 +9,7 @@ use gpui::{Context, KeyDownEvent, Window};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-use waifujahat_terminal::terminal::IdTab;
+use waifujahat_terminal::terminal::{ArahPanel, IdSesi, IdTab};
 
 impl JendelaTerminal {
     pub(super) fn tambah_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
@@ -26,6 +26,74 @@ impl JendelaTerminal {
 
         jendela.focus(&self.fokus, konteks);
         konteks.notify();
+    }
+
+    pub(super) fn pecah_panel(
+        &mut self,
+        arah: ArahPanel,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        if self.ruang().mouse_tui_ditekan.is_some() {
+            return;
+        }
+
+        let ruang = RuangSesi::baru();
+
+        if ruang.sesi.is_none() {
+            self.ruang_mut().status = ruang.status;
+
+            konteks.notify();
+            return;
+        }
+
+        self.ruang_mut().keadaan.seleksi.selesai();
+        self.ruang_mut().arah_gulir_seleksi = 0;
+
+        if self.manajer.pecah_aktif(ruang, arah).is_some() {
+            jendela.focus(&self.fokus, konteks);
+
+            konteks.notify();
+        }
+    }
+
+    pub(super) fn tutup_panel_dengan_id(
+        &mut self,
+        id: IdSesi,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        if self.ruang().mouse_tui_ditekan.is_some() {
+            return;
+        }
+
+        let Some(susunan) = self.manajer.tab_aktif() else {
+            return;
+        };
+
+        if susunan.jumlah() <= 1 || !susunan.daftar_id().contains(&id) {
+            return;
+        }
+
+        let sesi_sibuk = self.manajer.ambil(id).is_some_and(|ruang| {
+            ruang.keadaan.siklus.berjalan()
+                || ruang.keadaan.motor.layar_alternatif_aktif()
+                || ruang.mouse_tui_ditekan.is_some()
+        });
+
+        if sesi_sibuk {
+            self.ruang_mut().status = "Hentikan perintah sebelum menutup panel".into();
+
+            konteks.notify();
+            return;
+        }
+
+        if let Some(ruang) = self.manajer.tutup_panel(id) {
+            drop(ruang);
+
+            jendela.focus(&self.fokus, konteks);
+            konteks.notify();
+        }
     }
 
     pub(super) fn pilih_sesi(
@@ -132,6 +200,14 @@ impl JendelaTerminal {
 
             ("tab", true) | ("backtab", _) => {
                 self.pindah_sesi(true, jendela, konteks);
+            }
+
+            ("d", true) => {
+                self.pecah_panel(ArahPanel::Horizontal, jendela, konteks);
+            }
+
+            ("e", true) => {
+                self.pecah_panel(ArahPanel::Vertikal, jendela, konteks);
             }
 
             _ => return false,

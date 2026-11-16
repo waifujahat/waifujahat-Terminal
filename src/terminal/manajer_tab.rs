@@ -6,7 +6,7 @@
  */
 
 use super::manajer_sesi::{IdSesi, ManajerSesi};
-use super::susunan_panel::{ArahPanel, SusunanPanel};
+use super::susunan_panel::{ArahPanel, CabangPanel, SusunanPanel};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct IdTab(IdSesi);
@@ -105,6 +105,16 @@ impl<T> ManajerTab<T> {
         assert!(susunan.pecah(id, arah), "Gagal membagi panel aktif");
 
         Some(id)
+    }
+
+    pub fn atur_rasio_panel(&mut self, id: IdTab, jalur: &[CabangPanel], rasio: u16) -> bool {
+        if self.id_tab_aktif() != Some(id) {
+            return false;
+        }
+
+        self.tab
+            .aktif_mut()
+            .is_some_and(|susunan| susunan.atur_rasio(jalur, rasio))
     }
 
     pub fn tutup_panel(&mut self, id: IdSesi) -> Option<T> {

@@ -13,12 +13,23 @@ pub enum ArahPanel {
     Vertikal,
 }
 
+const RASIO_PANEL_AWAL: u16 = 650;
+const RASIO_PANEL_MINIMUM: u16 = 200;
+const RASIO_PANEL_MAKSIMUM: u16 = 800;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CabangPanel {
+    Pertama,
+    Kedua,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum SimpulPanel {
     Tunggal(IdSesi),
 
     Terbagi {
         arah: ArahPanel,
+        rasio: u16,
         pertama: Box<SimpulPanel>,
         kedua: Box<SimpulPanel>,
     },
@@ -49,6 +60,7 @@ impl SimpulPanel {
             Self::Tunggal(id) if *id == target => {
                 *self = Self::Terbagi {
                     arah,
+                    rasio: RASIO_PANEL_AWAL,
                     pertama: Box::new(Self::Tunggal(target)),
                     kedua: Box::new(Self::Tunggal(id_baru)),
                 };
@@ -60,6 +72,36 @@ impl SimpulPanel {
 
             Self::Terbagi { pertama, kedua, .. } => {
                 pertama.pecah(target, id_baru, arah) || kedua.pecah(target, id_baru, arah)
+            }
+        }
+    }
+
+    fn atur_rasio(&mut self, jalur: &[CabangPanel], nilai: u16) -> bool {
+        let Self::Terbagi {
+            rasio,
+            pertama,
+            kedua,
+            ..
+        } = self
+        else {
+            return false;
+        };
+
+        match jalur.split_first() {
+            Some((CabangPanel::Pertama, sisa)) => pertama.atur_rasio(sisa, nilai),
+
+            Some((CabangPanel::Kedua, sisa)) => kedua.atur_rasio(sisa, nilai),
+
+            None => {
+                let nilai = nilai.clamp(RASIO_PANEL_MINIMUM, RASIO_PANEL_MAKSIMUM);
+
+                if *rasio == nilai {
+                    return false;
+                }
+
+                *rasio = nilai;
+
+                true
             }
         }
     }
@@ -76,11 +118,13 @@ impl SimpulPanel {
 
             Self::Terbagi {
                 arah,
+                rasio,
                 pertama,
                 kedua,
             } => match (pertama.hapus(target), kedua.hapus(target)) {
                 (Some(pertama), Some(kedua)) => Some(Self::Terbagi {
                     arah,
+                    rasio,
                     pertama: Box::new(pertama),
                     kedua: Box::new(kedua),
                 }),
@@ -104,6 +148,23 @@ impl SusunanPanel {
             akar: SimpulPanel::Tunggal(id),
             aktif: id,
         }
+    }
+
+    pub fn hitung_rasio_tarikan(rasio_awal: u16, pergeseran: f32, panjang: f32) -> Option<u16> {
+        if !pergeseran.is_finite() || !panjang.is_finite() || panjang <= 0.0 {
+            return None;
+        }
+
+        let rasio = f32::from(rasio_awal) + pergeseran / panjang * 1000.0;
+
+        Some(rasio.round().clamp(
+            f32::from(RASIO_PANEL_MINIMUM),
+            f32::from(RASIO_PANEL_MAKSIMUM),
+        ) as u16)
+    }
+
+    pub fn atur_rasio(&mut self, jalur: &[CabangPanel], rasio: u16) -> bool {
+        self.akar.atur_rasio(jalur, rasio)
     }
 
     pub fn akar(&self) -> &SimpulPanel {

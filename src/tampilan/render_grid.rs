@@ -9,6 +9,7 @@ use gpui::{Context, CursorStyle, MouseButton, Window, div, prelude::*, px, rgb};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
+use waifujahat_terminal::terminal::IdSesi;
 
 const WARNA_SELEKSI: u32 = 0x493663;
 
@@ -30,6 +31,8 @@ impl RuangSesi {
 
     pub(super) fn buat_keluaran_grid(
         &self,
+        id: IdSesi,
+        panel_aktif: bool,
         jendela: &mut Window,
         konteks: &mut Context<JendelaTerminal>,
     ) -> impl IntoElement {
@@ -42,7 +45,7 @@ impl RuangSesi {
         let sedang_melihat_riwayat = self.keadaan.motor.offset_riwayat() > 0;
 
         let mut keluaran = div()
-            .id("keluaran-grid")
+            .id(format!("keluaran-grid-{}", id.nilai()))
             .w_full()
             .flex_1()
             .min_h_0()
@@ -51,8 +54,8 @@ impl RuangSesi {
             .overflow_y_scroll()
             .track_scroll(&self.gulir)
             .cursor(CursorStyle::IBeam)
-            .on_scroll(
-                konteks.listener(|terminal, kejadian: &gpui::ScrollEvent, _, konteks| {
+            .on_scroll(konteks.listener(
+                move |terminal, kejadian: &gpui::ScrollEvent, _, konteks| {
                     let delta = kejadian.delta.pixel_delta(px(18.0));
                     let jarak = f32::from(delta.y);
 
@@ -68,23 +71,26 @@ impl RuangSesi {
                         jumlah
                     };
 
-                    terminal.ruang_mut().keadaan.motor.geser_riwayat(jumlah);
-                    terminal.ruang_mut().keadaan.seleksi.bersihkan();
+                    if let Some(ruang) = terminal.manajer.ambil_mut(id) {
+                        ruang.keadaan.motor.geser_riwayat(jumlah);
+                        ruang.keadaan.seleksi.bersihkan();
+                    }
 
                     konteks.stop_propagation();
                     konteks.notify();
-                }),
-            )
+                },
+            ))
             .on_mouse_down(
                 MouseButton::Left,
-                konteks.listener(|terminal, kejadian, jendela, konteks| {
-                    terminal.mouse_ditekan(kejadian, jendela, konteks);
+                konteks.listener(move |terminal, kejadian, jendela, konteks| {
+                    terminal.mouse_ditekan_panel(id, kejadian, jendela, konteks);
                     konteks.stop_propagation();
                 }),
             );
 
         for (indeks, baris) in snapshot.baris.into_iter().enumerate() {
-            let kursor_aktif = !sedang_melihat_riwayat && kursor_terlihat && indeks == baris_kursor;
+            let kursor_aktif =
+                panel_aktif && !sedang_melihat_riwayat && kursor_terlihat && indeks == baris_kursor;
 
             let indeks_seleksi = indeks_awal_tampilan + indeks;
 
