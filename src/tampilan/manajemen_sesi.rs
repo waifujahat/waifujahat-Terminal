@@ -2,18 +2,18 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Session management
- * Purpose: Handles terminal session creation, navigation and closure
+ * Purpose: Handles terminal tab creation, navigation and closure
  */
 
 use gpui::{Context, KeyDownEvent, Window};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-use waifujahat_terminal::terminal::IdSesi;
+use waifujahat_terminal::terminal::IdTab;
 
 impl JendelaTerminal {
     pub(super) fn tambah_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
-        let mut ruang = RuangSesi::baru();
+        let ruang = RuangSesi::baru();
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;
@@ -22,9 +22,7 @@ impl JendelaTerminal {
             return;
         }
 
-        ruang.sesuaikan_ukuran(jendela, konteks);
-
-        self.manajer.tambah(ruang);
+        self.manajer.tambah_tab(ruang);
 
         jendela.focus(&self.fokus, konteks);
         konteks.notify();
@@ -32,18 +30,18 @@ impl JendelaTerminal {
 
     pub(super) fn pilih_sesi(
         &mut self,
-        id: IdSesi,
+        id: IdTab,
         jendela: &mut Window,
         konteks: &mut Context<Self>,
     ) {
-        if self.manajer.id_aktif() == Some(id) || self.ruang().mouse_tui_ditekan.is_some() {
+        if self.manajer.id_tab_aktif() == Some(id) || self.ruang().mouse_tui_ditekan.is_some() {
             return;
         }
 
         self.ruang_mut().keadaan.seleksi.selesai();
         self.ruang_mut().arah_gulir_seleksi = 0;
 
-        if self.manajer.pilih(id) {
+        if self.manajer.pilih_tab(id) {
             jendela.focus(&self.fokus, konteks);
             konteks.notify();
         }
@@ -57,43 +55,49 @@ impl JendelaTerminal {
         self.ruang_mut().keadaan.seleksi.selesai();
         self.ruang_mut().arah_gulir_seleksi = 0;
 
-        if self.manajer.geser_aktif(mundur) {
+        if self.manajer.geser_tab(mundur) {
             jendela.focus(&self.fokus, konteks);
             konteks.notify();
         }
     }
 
     fn tutup_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
-        if let Some(id) = self.manajer.id_aktif() {
+        if let Some(id) = self.manajer.id_tab_aktif() {
             self.tutup_sesi_dengan_id(id, jendela, konteks);
         }
     }
 
     pub(super) fn tutup_sesi_dengan_id(
         &mut self,
-        id: IdSesi,
+        id: IdTab,
         jendela: &mut Window,
         konteks: &mut Context<Self>,
     ) {
-        if self.manajer.jumlah() <= 1 {
-            self.ruang_mut().status = "Sesi terakhir tidak dapat ditutup".into();
+        if self.manajer.jumlah_tab() <= 1 {
+            self.ruang_mut().status = "Tab tidak dapat ditutup".into();
 
             konteks.notify();
             return;
         }
 
-        let Some(ruang) = self.manajer.ambil(id) else {
+        let Some(susunan) = self.manajer.ambil_tab(id) else {
             return;
         };
 
-        if ruang.keadaan.siklus.berjalan() || ruang.keadaan.motor.layar_alternatif_aktif() {
-            self.ruang_mut().status = "Hentikan perintah sebelum menutup sesi".into();
+        let sesi_sibuk = susunan.daftar_id().into_iter().any(|id_sesi| {
+            self.manajer.ambil(id_sesi).is_some_and(|ruang| {
+                ruang.keadaan.siklus.berjalan() || ruang.keadaan.motor.layar_alternatif_aktif()
+            })
+        });
+
+        if sesi_sibuk {
+            self.ruang_mut().status = "Hentikan perintah sebelum menutup tab".into();
 
             konteks.notify();
             return;
         }
 
-        drop(self.manajer.tutup(id));
+        drop(self.manajer.tutup_tab(id));
 
         jendela.focus(&self.fokus, konteks);
         konteks.notify();

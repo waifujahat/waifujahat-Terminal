@@ -21,6 +21,7 @@ pub(super) struct RuangSesi {
     pub(super) kolom_gulir_seleksi: usize,
     pub(super) mouse_tui_ditekan: Option<(usize, usize)>,
     pub(super) ukuran_pty: (u16, u16),
+    pub(super) ukuran_terakhir_diminta: Option<(u16, u16)>,
 }
 
 impl RuangSesi {
@@ -47,6 +48,7 @@ impl RuangSesi {
             kolom_gulir_seleksi: 0,
             mouse_tui_ditekan: None,
             ukuran_pty: (80, 24),
+            ukuran_terakhir_diminta: None,
         }
     }
 }

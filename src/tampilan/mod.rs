@@ -22,13 +22,14 @@ use gpui::{
     Task, Window,
 };
 
-use waifujahat_terminal::terminal::ManajerSesi;
+use waifujahat_terminal::terminal::ManajerTab;
 
 use ruang_sesi::RuangSesi;
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
-    manajer: ManajerSesi<RuangSesi>,
+    manajer: ManajerTab<RuangSesi>,
+    lebar_karakter: f32,
     _pengamat_ukuran: Subscription,
     _tugas_pantau: Task<()>,
 }
@@ -39,9 +40,9 @@ impl JendelaTerminal {
 
         jendela.focus(&fokus, konteks);
 
-        let mut manajer = ManajerSesi::baru();
+        let mut manajer = ManajerTab::baru();
 
-        manajer.tambah(RuangSesi::baru());
+        manajer.tambah_tab(RuangSesi::baru());
 
         let pengamat_ukuran =
             konteks.observe_window_bounds(jendela, |terminal, jendela, konteks| {
@@ -67,6 +68,7 @@ impl JendelaTerminal {
         let mut terminal = Self {
             fokus,
             manajer,
+            lebar_karakter: 1.0,
             _pengamat_ukuran: pengamat_ukuran,
             _tugas_pantau: tugas_pantau,
         };
@@ -85,9 +87,9 @@ impl JendelaTerminal {
     }
 
     pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
-        for (_, ruang) in self.manajer.iter_mut() {
-            ruang.sesuaikan_ukuran(jendela, konteks);
-        }
+        self.lebar_karakter = RuangSesi::lebar_karakter_grid(jendela);
+
+        konteks.notify();
     }
 
     pub(super) fn proses_tombol(

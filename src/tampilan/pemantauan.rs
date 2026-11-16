@@ -185,11 +185,23 @@ impl RuangSesi {
 
 impl JendelaTerminal {
     pub(super) fn periksa_keluaran(&mut self, konteks: &mut Context<Self>) -> bool {
-        let mode_grid = self.ruang().mode_grid_aktif();
+        let panel_terlihat = self
+            .manajer
+            .tab_aktif()
+            .map(|susunan| susunan.daftar_id())
+            .unwrap_or_default();
+
+        let lebar_karakter = self.lebar_karakter;
 
         let mut berubah = false;
 
-        for (_, ruang) in self.manajer.iter_mut() {
+        for (id, ruang) in self.manajer.iter_sesi_mut() {
+            if panel_terlihat.contains(&id) {
+                berubah |= ruang.sesuaikan_ukuran_panel(lebar_karakter);
+            }
+
+            let mode_grid = ruang.mode_grid_aktif();
+
             berubah |= ruang.periksa_keluaran(mode_grid);
         }
 

@@ -7,7 +7,10 @@
 
 use super::warna::{PotonganWarna, warna_rgb};
 
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{
+    Arc,
+    mpsc::{self, Receiver, Sender},
+};
 
 use alacritty_terminal::{
     event::{Event, EventListener},
@@ -66,8 +69,73 @@ impl MotorTerminal {
     }
 
     pub fn ubah_ukuran(&mut self, kolom: usize, baris: usize) {
-        let ukuran = TermSize::new(kolom.max(2), baris.max(1));
-        self.terminal.resize(ukuran);
+        let kolom = kolom.max(2);
+        let baris = baris.max(1);
+
+        let (kolom_sebelum, baris_sebelum) = self.ukuran();
+
+        let pertahankan_viewport = cfg!(windows)
+            && !self.layar_alternatif_aktif()
+            && self.jumlah_baris_riwayat() > 0
+            && (kolom != kolom_sebelum || baris > baris_sebelum);
+
+        // Menandai awal viewport sebelum proses reflow.
+        let penanda = if pertahankan_viewport {
+            let grid = self.terminal.grid_mut();
+            let sel = &mut grid[Line(0)][Column(0)];
+
+            let atribut_asli = sel.extra.take();
+
+            let identitas = Arc::new(atribut_asli.as_deref().cloned().unwrap_or_default());
+
+            sel.extra = Some(Arc::clone(&identitas));
+
+            Some((identitas, atribut_asli))
+        } else {
+            None
+        };
+
+        self.terminal.resize(TermSize::new(kolom, baris));
+
+        let Some((identitas, atribut_asli)) = penanda else {
+            return;
+        };
+
+        let grid = self.terminal.grid_mut();
+
+        let mut posisi = None;
+
+        'cari: for indeks_baris in grid.topmost_line().0..baris as i32 {
+            for indeks_kolom in 0..kolom {
+                let sel = &grid[Line(indeks_baris)][Column(indeks_kolom)];
+
+                if sel
+                    .extra
+                    .as_ref()
+                    .is_some_and(|atribut| Arc::ptr_eq(atribut, &identitas))
+                {
+                    posisi = Some((indeks_baris, indeks_kolom));
+
+                    break 'cari;
+                }
+            }
+        }
+
+        let Some((indeks_baris, indeks_kolom)) = posisi else {
+            return;
+        };
+
+        grid[Line(indeks_baris)][Column(indeks_kolom)].extra = atribut_asli;
+
+        if indeks_baris <= 0 {
+            return;
+        }
+
+        grid.scroll_up(&(Line(0)..Line(baris as i32)), indeks_baris as usize);
+
+        grid.cursor.point.line = Line((grid.cursor.point.line.0 - indeks_baris).max(0));
+
+        grid.saved_cursor.point.line = Line((grid.saved_cursor.point.line.0 - indeks_baris).max(0));
     }
 
     pub fn ukuran(&self) -> (usize, usize) {

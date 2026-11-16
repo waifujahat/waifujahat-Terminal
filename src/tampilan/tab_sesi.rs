@@ -16,7 +16,7 @@ const WARNA_TAB_NONAKTIF: u32 = 0x202536;
 
 impl JendelaTerminal {
     pub(super) fn buat_tab_sesi(&self, konteks: &mut Context<Self>) -> impl IntoElement {
-        let id_aktif = self.manajer.id_aktif();
+        let id_aktif = self.manajer.id_tab_aktif();
 
         let mut daftar = div()
             .id("daftar-tab-sesi")
@@ -27,7 +27,7 @@ impl JendelaTerminal {
             .gap_1()
             .overflow_x_scroll();
 
-        for id in self.manajer.daftar_id() {
+        for id in self.manajer.daftar_tab() {
             let aktif = id_aktif == Some(id);
 
             let warna = if aktif {
@@ -58,7 +58,7 @@ impl JendelaTerminal {
                         ),
                 );
 
-            if self.manajer.jumlah() > 1 {
+            if self.manajer.jumlah_tab() > 1 {
                 tab = tab.child(
                     div()
                         .id(format!("tutup-sesi-{}", id.nilai()))
