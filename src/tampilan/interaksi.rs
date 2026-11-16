@@ -12,7 +12,7 @@ use gpui::{
     Pixels, Point, TextRun, Window, px, white,
 };
 
-use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal, sandi_tempel};
+use waifujahat_terminal::terminal::{AksiPengajuan, PosisiSeleksi, TombolTerminal, sandi_tempel};
 
 use super::JendelaTerminal;
 
@@ -254,6 +254,10 @@ impl JendelaTerminal {
     }
 
     fn kirim_perintah_shell(&mut self) {
+        if !self.siklus.siap() {
+            return;
+        }
+
         let Some(sesi) = &self.sesi else {
             self.status = "Sesi PowerShell tidak tersedia".into();
             return;
@@ -271,8 +275,8 @@ impl JendelaTerminal {
             return;
         }
 
-        self.indeks_baris_sebelum_perintah = indeks_baris;
-        self.perintah_berjalan = true;
+        self.siklus.mulai(indeks_baris, Instant::now());
+
         self.seleksi.bersihkan();
         self.status.clear();
     }
@@ -290,8 +294,8 @@ impl JendelaTerminal {
 
     pub(super) fn pindah_kursor_mouse(&mut self, posisi: PosisiSeleksi) {
         if !self.mode_grid_aktif()
-            || self.perintah_berjalan
-            || self.menunggu_konfirmasi_perintah
+            || self.siklus.berjalan()
+            || self.siklus.menunggu_konfirmasi()
             || self.motor.layar_alternatif_aktif()
             || self.motor.offset_riwayat() > 0
         {
@@ -356,7 +360,7 @@ impl JendelaTerminal {
 
     fn rentang_seleksi_input(&self) -> Option<(usize, usize)> {
         if !self.mode_grid_aktif()
-            || self.perintah_berjalan
+            || self.siklus.berjalan()
             || self.motor.layar_alternatif_aktif()
             || self.motor.offset_riwayat() > 0
             || self.sesi.is_none()
@@ -435,11 +439,16 @@ impl JendelaTerminal {
     }
 
     fn ajukan_perintah_shell(&mut self) {
-        if self.konfirmasi_perintah_aktif {
-            self.menunggu_konfirmasi_perintah = true;
-            self.status.clear();
-        } else {
-            self.kirim_perintah_shell();
+        match self.siklus.ajukan() {
+            AksiPengajuan::Konfirmasi => {
+                self.status.clear();
+            }
+
+            AksiPengajuan::Jalankan => {
+                self.kirim_perintah_shell();
+            }
+
+            AksiPengajuan::Abaikan => {}
         }
     }
 
@@ -452,7 +461,8 @@ impl JendelaTerminal {
         let tombol = &kejadian.keystroke;
         let nama_tombol = tombol.key.to_ascii_lowercase();
 
-        let shell_siap = !self.perintah_berjalan && !self.motor.layar_alternatif_aktif();
+        let shell_siap = (self.siklus.siap() || self.siklus.menunggu_konfirmasi())
+            && !self.motor.layar_alternatif_aktif();
 
         if shell_siap
             && nama_tombol == "f8"
@@ -461,10 +471,9 @@ impl JendelaTerminal {
             && !tombol.modifiers.alt
             && !tombol.modifiers.shift
         {
-            self.konfirmasi_perintah_aktif = !self.konfirmasi_perintah_aktif;
-            self.menunggu_konfirmasi_perintah = false;
+            self.siklus.ubah_konfirmasi();
 
-            self.status = if self.konfirmasi_perintah_aktif {
+            self.status = if self.siklus.konfirmasi_aktif() {
                 "Konfirmasi menjalankan perintah diaktifkan"
             } else {
                 "Konfirmasi menjalankan perintah dinonaktifkan"
@@ -475,14 +484,14 @@ impl JendelaTerminal {
             return;
         }
 
-        if self.menunggu_konfirmasi_perintah {
+        if self.siklus.menunggu_konfirmasi() {
             let tanpa_pengubah =
                 !tombol.modifiers.control && !tombol.modifiers.platform && !tombol.modifiers.alt;
 
             if tanpa_pengubah {
                 match nama_tombol.as_str() {
                     "y" => {
-                        self.menunggu_konfirmasi_perintah = false;
+                        self.siklus.selesaikan_konfirmasi();
                         self.kirim_perintah_shell();
 
                         self.gulir.scroll_to_bottom();
@@ -491,7 +500,7 @@ impl JendelaTerminal {
                     }
 
                     "n" | "escape" | "esc" => {
-                        self.menunggu_konfirmasi_perintah = false;
+                        self.siklus.selesaikan_konfirmasi();
                         self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
 
                         self.status = "Perintah tidak dijalankan".into();
@@ -506,7 +515,7 @@ impl JendelaTerminal {
                 }
             }
 
-            self.menunggu_konfirmasi_perintah = false;
+            self.siklus.selesaikan_konfirmasi();
             self.status.clear();
         }
 

@@ -5,10 +5,12 @@
  * Purpose: Exposes reusable terminal components
  */
 
+mod integrasi_shell;
 mod layar;
 mod masukan;
 mod motor;
 mod mouse;
+mod perintah;
 mod riwayat;
 mod seleksi;
 mod sesi;
@@ -17,10 +19,12 @@ mod tempel;
 mod tombol;
 mod warna;
 
+pub use integrasi_shell::{ParserIntegrasiShell, PenandaShell};
 pub use layar::LayarTerminal;
 pub use masukan::MasukanTerminal;
 pub use motor::MotorTerminal;
 pub use mouse::{AksiMouse, PengubahMouse, TombolMouse, sandi_mouse_sgr};
+pub use perintah::{AksiPengajuan, SiklusPerintah, StatusPerintah};
 pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};

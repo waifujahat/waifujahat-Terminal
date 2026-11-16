@@ -6,7 +6,7 @@
  */
 
 use gpui::Context;
-use waifujahat_terminal::terminal::{PesanTerminal, PosisiSeleksi, SesiTerminal};
+use waifujahat_terminal::terminal::{PenandaShell, PesanTerminal, PosisiSeleksi, SesiTerminal};
 
 use super::JendelaTerminal;
 
@@ -14,6 +14,10 @@ use std::time::Instant;
 
 impl JendelaTerminal {
     fn prompt_powershell_terlihat(&self) -> bool {
+        let Some(indeks_baris_awal) = self.siklus.indeks_baris_awal() else {
+            return false;
+        };
+
         let baris = self.layar.baris();
 
         let Some((indeks, teks)) = baris
@@ -27,9 +31,38 @@ impl JendelaTerminal {
 
         let teks = teks.trim();
 
-        indeks > self.indeks_baris_sebelum_perintah
-            && teks.starts_with("PS ")
-            && teks.ends_with('>')
+        indeks > indeks_baris_awal && teks.starts_with("PS ") && teks.ends_with('>')
+    }
+
+    fn selesaikan_perintah(&mut self, kode_keluar: Option<i32>) {
+        if !self.siklus.selesai_dengan_kode(Instant::now(), kode_keluar) {
+            return;
+        }
+
+        let Some(durasi) = self.siklus.durasi_terakhir() else {
+            return;
+        };
+
+        self.status = match self.siklus.kode_keluar_terakhir() {
+            Some(0) => {
+                format!(
+                    "Berhasil dalam {:.2} detik | Exit code: 0",
+                    durasi.as_secs_f64()
+                )
+            }
+
+            Some(kode) => {
+                format!(
+                    "Gagal dalam {:.2} detik | Exit code: {}",
+                    durasi.as_secs_f64(),
+                    kode
+                )
+            }
+
+            None => {
+                format!("Selesai dalam {:.2} detik", durasi.as_secs_f64())
+            }
+        };
     }
 
     pub(super) fn periksa_keluaran(&mut self, konteks: &mut Context<Self>) -> bool {
@@ -53,11 +86,19 @@ impl JendelaTerminal {
                         self.arah_gulir_seleksi = 0;
                     }
 
-                    if self.perintah_berjalan
+                    let penanda_shell = self.integrasi_shell.terima(&buffer);
+
+                    for penanda in penanda_shell {
+                        if let PenandaShell::PerintahSelesai(kode_keluar) = penanda {
+                            self.selesaikan_perintah(kode_keluar);
+                        }
+                    }
+
+                    if self.siklus.berjalan()
                         && !layar_alternatif_aktif
                         && self.prompt_powershell_terlihat()
                     {
-                        self.perintah_berjalan = false;
+                        self.selesaikan_perintah(None);
                     }
 
                     while let Some(respons) = self.motor.ambil_respons() {
@@ -76,7 +117,7 @@ impl JendelaTerminal {
                 Some(PesanTerminal::Kesalahan(pesan)) => {
                     self.status = pesan;
                     self.sesi = None;
-                    self.perintah_berjalan = false;
+                    self.siklus.akhiri_sesi();
                     berubah = true;
                     break;
                 }
@@ -84,7 +125,7 @@ impl JendelaTerminal {
                 Some(PesanTerminal::Berakhir) => {
                     self.status = "Sesi PowerShell telah berakhir".into();
                     self.sesi = None;
-                    self.perintah_berjalan = false;
+                    self.siklus.akhiri_sesi();
                     berubah = true;
                     break;
                 }

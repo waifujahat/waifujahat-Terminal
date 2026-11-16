@@ -48,6 +48,9 @@ impl SesiTerminal {
 
         perintah.arg("-NoLogo");
         perintah.arg("-NoProfile");
+        perintah.arg("-NoExit");
+        perintah.arg("-Command");
+        perintah.arg(include_str!("integrasi_powershell.ps1"));
 
         let proses = pasangan
             .slave

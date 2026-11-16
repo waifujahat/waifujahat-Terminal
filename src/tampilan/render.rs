@@ -205,16 +205,16 @@ impl Render for JendelaTerminal {
                 .justify_between()
                 .text_xs()
                 .text_color(rgb(WARNA_AKSEN))
-                .child(if self.menunggu_konfirmasi_perintah {
+                .child(if self.siklus.menunggu_konfirmasi() {
                     "Apakah input sudah benar?".to_string()
                 } else {
                     self.status.clone()
                 })
-                .child(if self.menunggu_konfirmasi_perintah {
+                .child(if self.siklus.menunggu_konfirmasi() {
                     "Tekan Y : Ya | N/Esc : Batal"
-                } else if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
+                } else if self.siklus.berjalan() || self.motor.layar_alternatif_aktif() {
                     "Running - Esc untuk membatalkan"
-                } else if self.konfirmasi_perintah_aktif {
+                } else if self.siklus.konfirmasi_aktif() {
                     "Toggle Konfirmasi : ON (Tekan F8)"
                 } else {
                     "Toggle Konfirmasi : OFF (Tekan F8)"

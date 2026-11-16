@@ -15,7 +15,10 @@ mod render_grid;
 use std::time::{Duration, Instant};
 
 use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window};
-use waifujahat_terminal::terminal::{LayarTerminal, MotorTerminal, SeleksiTerminal, SesiTerminal};
+use waifujahat_terminal::terminal::{
+    LayarTerminal, MotorTerminal, ParserIntegrasiShell, SeleksiTerminal, SesiTerminal,
+    SiklusPerintah,
+};
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
@@ -25,10 +28,8 @@ pub(crate) struct JendelaTerminal {
     sesi: Option<SesiTerminal>,
     status: String,
     batas_status_salin: Option<Instant>,
-    perintah_berjalan: bool,
-    menunggu_konfirmasi_perintah: bool,
-    konfirmasi_perintah_aktif: bool,
-    indeks_baris_sebelum_perintah: usize,
+    siklus: SiklusPerintah,
+    integrasi_shell: ParserIntegrasiShell,
     seleksi: SeleksiTerminal,
     arah_gulir_seleksi: i8,
     kolom_gulir_seleksi: usize,
@@ -69,6 +70,12 @@ impl JendelaTerminal {
             }
         });
 
+        let mut siklus = SiklusPerintah::baru();
+
+        if sesi.is_none() {
+            siklus.akhiri_sesi();
+        }
+
         let mut terminal = Self {
             fokus,
             gulir: ScrollHandle::new(),
@@ -77,10 +84,8 @@ impl JendelaTerminal {
             sesi,
             status,
             batas_status_salin: None,
-            perintah_berjalan: false,
-            menunggu_konfirmasi_perintah: false,
-            konfirmasi_perintah_aktif: true,
-            indeks_baris_sebelum_perintah: 0,
+            siklus,
+            integrasi_shell: ParserIntegrasiShell::baru(),
             seleksi: SeleksiTerminal::baru(),
             arah_gulir_seleksi: 0,
             kolom_gulir_seleksi: 0,
