@@ -1,0 +1,19 @@
+# Third-Party Notices
+
+Waifujahat Terminal incorporates third-party software components.
+These components remain subject to their respective license terms.
+
+{{#each licenses}}
+## {{name}} ({{id}})
+
+Used by:
+
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+~~~~text
+{{{text}}}
+~~~~
+
+{{/each}}

@@ -5,7 +5,8 @@ repository = "https://github.com/waifujahat/waifujahat-Terminal"
 version = "0.1.0"
 edition = "2024"
 description = "Native desktop terminal built with Rust and GPUI"
-license = "MIT"
+license-file = "LICENSE"
+publish = false
 build = "build.rs"
 
 [dependencies]
