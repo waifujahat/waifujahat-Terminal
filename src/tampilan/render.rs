@@ -10,20 +10,24 @@ use gpui::{
     rgb, rgba,
 };
 
-use super::JendelaTerminal;
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
 
-impl JendelaTerminal {
+impl RuangSesi {
     pub(super) fn baris_terminal(&self) -> Vec<String> {
-        let mut baris = self.layar.baris();
+        let mut baris = self.keadaan.layar.baris();
 
         if baris.is_empty() {
             baris.push(String::new());
         }
 
-        let indeks_kursor = self.layar.indeks_baris_kursor().min(baris.len() - 1);
+        let indeks_kursor = self
+            .keadaan
+            .layar
+            .indeks_baris_kursor()
+            .min(baris.len() - 1);
 
         let indeks_terakhir_berisi = baris
             .iter()
@@ -37,18 +41,12 @@ impl JendelaTerminal {
         baris
     }
 
-    fn buat_informasi_terminal(&self) -> impl IntoElement {
-        div()
-            .text_color(rgb(WARNA_TEKS))
-            .child("Waifujahat Terminal 0.1.0")
-    }
-
-    fn buat_keluaran_terminal(&self, konteks: &mut Context<Self>) -> impl IntoElement {
+    fn buat_keluaran_terminal(&self, konteks: &mut Context<JendelaTerminal>) -> impl IntoElement {
         let baris = self.baris_terminal();
         let jumlah_baris = baris.len();
 
-        let baris_motor = self.motor.baris_layar();
-        let warna_motor = self.motor.baris_berwarna(WARNA_TEKS, WARNA_LATAR);
+        let baris_motor = self.keadaan.motor.baris_layar();
+        let warna_motor = self.keadaan.motor.baris_berwarna(WARNA_TEKS, WARNA_LATAR);
         let pergeseran = jumlah_baris.saturating_sub(baris_motor.len());
 
         let mut keluaran = div()
@@ -85,7 +83,7 @@ impl JendelaTerminal {
                 .items_center()
                 .whitespace_nowrap();
 
-            if let Some((mulai, selesai)) = self.seleksi.potongan_baris(indeks, &teks) {
+            if let Some((mulai, selesai)) = self.keadaan.seleksi.potongan_baris(indeks, &teks) {
                 let karakter: Vec<char> = teks.chars().collect();
 
                 let sebelum: String = karakter[..mulai].iter().collect();
@@ -142,7 +140,7 @@ impl Render for JendelaTerminal {
             .join("images")
             .join("demo.jpg");
 
-        let mode_grid = self.mode_grid_aktif();
+        let mode_grid = self.ruang().mode_grid_aktif();
 
         let mut halaman = div()
             .id("jendela-terminal")
@@ -154,7 +152,7 @@ impl Render for JendelaTerminal {
                 MouseButton::Left,
                 konteks.listener(|terminal, _, jendela, konteks| {
                     jendela.focus(&terminal.fokus, konteks);
-                    terminal.seleksi.bersihkan();
+                    terminal.ruang_mut().keadaan.seleksi.bersihkan();
                     konteks.notify();
                 }),
             )
@@ -191,12 +189,12 @@ impl Render for JendelaTerminal {
                     .object_fit(ObjectFit::Cover),
             )
             .child(div().absolute().inset_0().bg(rgba(0x090d18b3)))
-            .child(self.buat_informasi_terminal());
+            .child(self.buat_tab_sesi(konteks));
 
         if mode_grid {
-            halaman = halaman.child(self.buat_keluaran_grid(jendela, konteks));
+            halaman = halaman.child(self.ruang().buat_keluaran_grid(jendela, konteks));
         } else {
-            halaman = halaman.child(self.buat_keluaran_terminal(konteks));
+            halaman = halaman.child(self.ruang().buat_keluaran_terminal(konteks));
         }
 
         halaman.child(
@@ -205,16 +203,18 @@ impl Render for JendelaTerminal {
                 .justify_between()
                 .text_xs()
                 .text_color(rgb(WARNA_AKSEN))
-                .child(if self.siklus.menunggu_konfirmasi() {
+                .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
                     "Apakah input sudah benar?".to_string()
                 } else {
-                    self.status.clone()
+                    self.ruang().status.clone()
                 })
-                .child(if self.siklus.menunggu_konfirmasi() {
+                .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
                     "Tekan Y : Ya | N/Esc : Batal"
-                } else if self.siklus.berjalan() || self.motor.layar_alternatif_aktif() {
+                } else if self.ruang().keadaan.siklus.berjalan()
+                    || self.ruang().keadaan.motor.layar_alternatif_aktif()
+                {
                     "Running - Esc untuk membatalkan"
-                } else if self.siklus.konfirmasi_aktif() {
+                } else if self.ruang().keadaan.siklus.konfirmasi_aktif() {
                     "Toggle Konfirmasi : ON (Tekan F8)"
                 } else {
                     "Toggle Konfirmasi : OFF (Tekan F8)"

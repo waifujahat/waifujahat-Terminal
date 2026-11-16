@@ -7,12 +7,12 @@
 
 use gpui::{Context, CursorStyle, MouseButton, Window, div, prelude::*, px, rgb};
 
-use super::JendelaTerminal;
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
 
-impl JendelaTerminal {
+impl RuangSesi {
     pub(super) fn mode_grid_aktif(&self) -> bool {
         match std::env::var("WAIFUJAHAT_RENDER_GRID") {
             Ok(nilai) => nilai == "1",
@@ -25,21 +25,21 @@ impl JendelaTerminal {
             return self.baris_terminal();
         }
 
-        self.motor.semua_baris()
+        self.keadaan.motor.semua_baris()
     }
 
     pub(super) fn buat_keluaran_grid(
         &self,
         jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) -> impl IntoElement {
         let lebar_karakter = Self::lebar_karakter_grid(jendela);
-        let snapshot = self.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
+        let snapshot = self.keadaan.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
         let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
         let kursor_terlihat = snapshot.kursor_terlihat;
         let jumlah_kolom = snapshot.kolom;
-        let indeks_awal_tampilan = self.motor.indeks_awal_tampilan();
-        let sedang_melihat_riwayat = self.motor.offset_riwayat() > 0;
+        let indeks_awal_tampilan = self.keadaan.motor.indeks_awal_tampilan();
+        let sedang_melihat_riwayat = self.keadaan.motor.offset_riwayat() > 0;
 
         let mut keluaran = div()
             .id("keluaran-grid")
@@ -68,8 +68,8 @@ impl JendelaTerminal {
                         jumlah
                     };
 
-                    terminal.motor.geser_riwayat(jumlah);
-                    terminal.seleksi.bersihkan();
+                    terminal.ruang_mut().keadaan.motor.geser_riwayat(jumlah);
+                    terminal.ruang_mut().keadaan.seleksi.bersihkan();
 
                     konteks.stop_propagation();
                     konteks.notify();
@@ -88,7 +88,10 @@ impl JendelaTerminal {
 
             let indeks_seleksi = indeks_awal_tampilan + indeks;
 
-            let rentang = self.seleksi.potongan_baris(indeks_seleksi, &baris.teks);
+            let rentang = self
+                .keadaan
+                .seleksi
+                .potongan_baris(indeks_seleksi, &baris.teks);
 
             let mut elemen_baris = div()
                 .id(format!("baris-grid-{indeks}"))

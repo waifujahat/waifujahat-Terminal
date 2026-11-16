@@ -14,9 +14,9 @@ use gpui::{
 
 use waifujahat_terminal::terminal::{AksiPengajuan, PosisiSeleksi, TombolTerminal, sandi_tempel};
 
-use super::JendelaTerminal;
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-impl JendelaTerminal {
+impl RuangSesi {
     fn posisi_dari_mouse(
         &self,
         posisi: Point<Pixels>,
@@ -27,13 +27,13 @@ impl JendelaTerminal {
         let mode_grid = self.mode_grid_aktif();
 
         let indeks_awal = if mode_grid {
-            self.motor.indeks_awal_tampilan()
+            self.keadaan.motor.indeks_awal_tampilan()
         } else {
             0
         };
 
         let jumlah_terlihat = if mode_grid {
-            self.motor.ukuran().1
+            self.keadaan.motor.ukuran().1
         } else {
             baris.len()
         };
@@ -78,6 +78,7 @@ impl JendelaTerminal {
             let posisi_x = f32::from(posisi.x - (batas.left() + offset.x));
 
             let kolom = self
+                .keadaan
                 .motor
                 .indeks_karakter_grid(indeks_baris, posisi_x / lebar)
                 .min(teks.chars().count());
@@ -118,9 +119,8 @@ impl JendelaTerminal {
         &mut self,
         kejadian: &MouseDownEvent,
         jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) {
-        jendela.focus(&self.fokus, konteks);
         self.arah_gulir_seleksi = 0;
 
         if self.tangani_tekan_mouse_tui(kejadian, jendela, konteks) {
@@ -128,7 +128,7 @@ impl JendelaTerminal {
         }
 
         let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) else {
-            self.seleksi.bersihkan();
+            self.keadaan.seleksi.bersihkan();
             konteks.notify();
             return;
         };
@@ -137,15 +137,15 @@ impl JendelaTerminal {
 
         match kejadian.click_count {
             3.. => {
-                self.seleksi.pilih_baris(&baris, posisi.baris);
+                self.keadaan.seleksi.pilih_baris(&baris, posisi.baris);
             }
 
             2 => {
-                self.seleksi.pilih_kata(&baris, posisi);
+                self.keadaan.seleksi.pilih_kata(&baris, posisi);
             }
 
             _ => {
-                self.seleksi.mulai(posisi);
+                self.keadaan.seleksi.mulai(posisi);
             }
         }
 
@@ -156,26 +156,26 @@ impl JendelaTerminal {
         &mut self,
         kejadian: &MouseMoveEvent,
         jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) {
         if self.mouse_tui_ditekan.is_some() {
             return;
         }
 
-        if !self.seleksi.sedang_memilih() {
+        if !self.keadaan.seleksi.sedang_memilih() {
             self.arah_gulir_seleksi = 0;
             return;
         }
 
         if kejadian.pressed_button != Some(MouseButton::Left) {
             self.arah_gulir_seleksi = 0;
-            self.seleksi.selesai();
+            self.keadaan.seleksi.selesai();
             return;
         }
 
         if self.mode_grid_aktif() {
             let offset = self.gulir.offset().y;
-            let tinggi = self.motor.ukuran().1;
+            let tinggi = self.keadaan.motor.ukuran().1;
 
             let batas_atas = self
                 .gulir
@@ -198,15 +198,15 @@ impl JendelaTerminal {
 
         if let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) {
             self.kolom_gulir_seleksi = posisi.kolom;
-            self.seleksi.perbarui(posisi);
+            self.keadaan.seleksi.perbarui(posisi);
             konteks.notify();
         }
     }
 
-    fn salin_seleksi(&mut self, konteks: &mut Context<Self>) {
+    fn salin_seleksi(&mut self, konteks: &mut Context<JendelaTerminal>) {
         let baris = self.baris_seleksi();
 
-        let Some(teks) = self.seleksi.teks_terpilih(&baris) else {
+        let Some(teks) = self.keadaan.seleksi.teks_terpilih(&baris) else {
             return;
         };
 
@@ -218,7 +218,7 @@ impl JendelaTerminal {
         konteks.notify();
     }
 
-    fn tempel_clipboard(&mut self, konteks: &mut Context<Self>) {
+    fn tempel_clipboard(&mut self, konteks: &mut Context<JendelaTerminal>) {
         let Some(teks) = konteks.read_from_clipboard().and_then(|isi| isi.text()) else {
             return;
         };
@@ -228,7 +228,7 @@ impl JendelaTerminal {
         }
 
         if self.mode_grid_aktif() {
-            self.motor.kembali_ke_bawah();
+            self.keadaan.motor.kembali_ke_bawah();
         }
 
         let Some(sesi) = &self.sesi else {
@@ -237,7 +237,7 @@ impl JendelaTerminal {
             return;
         };
 
-        let berbingkai = self.motor.tempel_berbingkai_aktif();
+        let berbingkai = self.keadaan.motor.tempel_berbingkai_aktif();
         let data = sandi_tempel(&teks, berbingkai);
 
         if let Err(kesalahan) = sesi.kirim_bytes(&data) {
@@ -254,7 +254,7 @@ impl JendelaTerminal {
     }
 
     fn kirim_perintah_shell(&mut self) {
-        if !self.siklus.siap() {
+        if !self.keadaan.siklus.siap() {
             return;
         }
 
@@ -264,6 +264,7 @@ impl JendelaTerminal {
         };
 
         let indeks_baris = self
+            .keadaan
             .layar
             .baris()
             .iter()
@@ -275,9 +276,9 @@ impl JendelaTerminal {
             return;
         }
 
-        self.siklus.mulai(indeks_baris, Instant::now());
+        self.keadaan.siklus.mulai(indeks_baris, Instant::now());
 
-        self.seleksi.bersihkan();
+        self.keadaan.seleksi.bersihkan();
         self.status.clear();
     }
 
@@ -294,23 +295,23 @@ impl JendelaTerminal {
 
     pub(super) fn pindah_kursor_mouse(&mut self, posisi: PosisiSeleksi) {
         if !self.mode_grid_aktif()
-            || self.siklus.berjalan()
-            || self.siklus.menunggu_konfirmasi()
-            || self.motor.layar_alternatif_aktif()
-            || self.motor.offset_riwayat() > 0
+            || self.keadaan.siklus.berjalan()
+            || self.keadaan.siklus.menunggu_konfirmasi()
+            || self.keadaan.motor.layar_alternatif_aktif()
+            || self.keadaan.motor.offset_riwayat() > 0
         {
             return;
         }
 
-        let (baris_kursor, kolom_kursor) = self.motor.posisi_kursor();
+        let (baris_kursor, kolom_kursor) = self.keadaan.motor.posisi_kursor();
 
-        let indeks_baris = self.motor.jumlah_baris_riwayat() + baris_kursor;
+        let indeks_baris = self.keadaan.motor.jumlah_baris_riwayat() + baris_kursor;
 
         if posisi.baris != indeks_baris {
             return;
         }
 
-        let baris = self.motor.semua_baris();
+        let baris = self.keadaan.motor.semua_baris();
 
         let Some(teks) = baris.get(indeks_baris) else {
             return;
@@ -318,7 +319,7 @@ impl JendelaTerminal {
 
         if !teks.starts_with("PS ")
             || !teks.is_ascii()
-            || teks.len() >= self.motor.ukuran().0
+            || teks.len() >= self.keadaan.motor.ukuran().0
             || kolom_kursor > teks.len()
             || baris[indeks_baris + 1..]
                 .iter()
@@ -360,29 +361,29 @@ impl JendelaTerminal {
 
     fn rentang_seleksi_input(&self) -> Option<(usize, usize)> {
         if !self.mode_grid_aktif()
-            || self.siklus.berjalan()
-            || self.motor.layar_alternatif_aktif()
-            || self.motor.offset_riwayat() > 0
+            || self.keadaan.siklus.berjalan()
+            || self.keadaan.motor.layar_alternatif_aktif()
+            || self.keadaan.motor.offset_riwayat() > 0
             || self.sesi.is_none()
         {
             return None;
         }
 
-        let (awal, akhir) = self.seleksi.rentang()?;
-        let (baris_kursor, kolom_kursor) = self.motor.posisi_kursor();
+        let (awal, akhir) = self.keadaan.seleksi.rentang()?;
+        let (baris_kursor, kolom_kursor) = self.keadaan.motor.posisi_kursor();
 
-        let indeks_baris = self.motor.jumlah_baris_riwayat() + baris_kursor;
+        let indeks_baris = self.keadaan.motor.jumlah_baris_riwayat() + baris_kursor;
 
         if awal.baris != indeks_baris || akhir.baris != indeks_baris {
             return None;
         }
 
-        let baris = self.motor.semua_baris();
+        let baris = self.keadaan.motor.semua_baris();
         let teks = baris.get(indeks_baris)?;
 
         if !teks.starts_with("PS ")
             || !teks.is_ascii()
-            || teks.len() >= self.motor.ukuran().0
+            || teks.len() >= self.keadaan.motor.ukuran().0
             || kolom_kursor > teks.len()
             || baris[indeks_baris + 1..]
                 .iter()
@@ -405,7 +406,7 @@ impl JendelaTerminal {
     }
 
     fn hapus_seleksi_input(&mut self, tombol: TombolTerminal<'_>) -> bool {
-        if self.seleksi.rentang().is_none() {
+        if self.keadaan.seleksi.rentang().is_none() {
             return false;
         }
 
@@ -432,14 +433,14 @@ impl JendelaTerminal {
             return true;
         }
 
-        self.seleksi.bersihkan();
+        self.keadaan.seleksi.bersihkan();
         self.status.clear();
 
         true
     }
 
     fn ajukan_perintah_shell(&mut self) {
-        match self.siklus.ajukan() {
+        match self.keadaan.siklus.ajukan() {
             AksiPengajuan::Konfirmasi => {
                 self.status.clear();
             }
@@ -456,13 +457,13 @@ impl JendelaTerminal {
         &mut self,
         kejadian: &KeyDownEvent,
         _jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) {
         let tombol = &kejadian.keystroke;
         let nama_tombol = tombol.key.to_ascii_lowercase();
 
-        let shell_siap = (self.siklus.siap() || self.siklus.menunggu_konfirmasi())
-            && !self.motor.layar_alternatif_aktif();
+        let shell_siap = (self.keadaan.siklus.siap() || self.keadaan.siklus.menunggu_konfirmasi())
+            && !self.keadaan.motor.layar_alternatif_aktif();
 
         if shell_siap
             && nama_tombol == "f8"
@@ -471,9 +472,9 @@ impl JendelaTerminal {
             && !tombol.modifiers.alt
             && !tombol.modifiers.shift
         {
-            self.siklus.ubah_konfirmasi();
+            self.keadaan.siklus.ubah_konfirmasi();
 
-            self.status = if self.siklus.konfirmasi_aktif() {
+            self.status = if self.keadaan.siklus.konfirmasi_aktif() {
                 "Konfirmasi menjalankan perintah diaktifkan"
             } else {
                 "Konfirmasi menjalankan perintah dinonaktifkan"
@@ -484,14 +485,14 @@ impl JendelaTerminal {
             return;
         }
 
-        if self.siklus.menunggu_konfirmasi() {
+        if self.keadaan.siklus.menunggu_konfirmasi() {
             let tanpa_pengubah =
                 !tombol.modifiers.control && !tombol.modifiers.platform && !tombol.modifiers.alt;
 
             if tanpa_pengubah {
                 match nama_tombol.as_str() {
                     "y" => {
-                        self.siklus.selesaikan_konfirmasi();
+                        self.keadaan.siklus.selesaikan_konfirmasi();
                         self.kirim_perintah_shell();
 
                         self.gulir.scroll_to_bottom();
@@ -500,7 +501,7 @@ impl JendelaTerminal {
                     }
 
                     "n" | "escape" | "esc" => {
-                        self.siklus.selesaikan_konfirmasi();
+                        self.keadaan.siklus.selesaikan_konfirmasi();
                         self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
 
                         self.status = "Perintah tidak dijalankan".into();
@@ -515,7 +516,7 @@ impl JendelaTerminal {
                 }
             }
 
-            self.siklus.selesaikan_konfirmasi();
+            self.keadaan.siklus.selesaikan_konfirmasi();
             self.status.clear();
         }
 
@@ -525,7 +526,7 @@ impl JendelaTerminal {
             && !tombol.modifiers.platform
             && !tombol.modifiers.alt
         {
-            let tinggi = self.motor.ukuran().1;
+            let tinggi = self.keadaan.motor.ukuran().1;
             let jumlah_baris = tinggi.saturating_sub(1).max(1);
             let langkah = isize::try_from(jumlah_baris).unwrap_or(isize::MAX);
 
@@ -536,8 +537,8 @@ impl JendelaTerminal {
             };
 
             if perpindahan != 0 {
-                self.motor.geser_riwayat(perpindahan);
-                self.seleksi.bersihkan();
+                self.keadaan.motor.geser_riwayat(perpindahan);
+                self.keadaan.seleksi.bersihkan();
 
                 konteks.notify();
                 return;
@@ -548,6 +549,7 @@ impl JendelaTerminal {
             match nama_tombol.as_str() {
                 "c" => {
                     let ada_seleksi = self
+                        .keadaan
                         .seleksi
                         .teks_terpilih(&self.baris_seleksi())
                         .is_some_and(|teks| !teks.is_empty());
@@ -606,9 +608,9 @@ impl JendelaTerminal {
             return;
         }
 
-        if self.mode_grid_aktif() && self.motor.offset_riwayat() > 0 {
-            self.motor.kembali_ke_bawah();
-            self.seleksi.bersihkan();
+        if self.mode_grid_aktif() && self.keadaan.motor.offset_riwayat() > 0 {
+            self.keadaan.motor.kembali_ke_bawah();
+            self.keadaan.seleksi.bersihkan();
         }
 
         match nama_tombol.as_str() {

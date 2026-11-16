@@ -7,9 +7,9 @@
 
 use gpui::{Context, Font, TextRun, Window, px, white};
 
-use super::JendelaTerminal;
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-impl JendelaTerminal {
+impl RuangSesi {
     pub(super) fn lebar_karakter_grid(jendela: &mut Window) -> f32 {
         let contoh = "MMMMMMMMMM";
 
@@ -32,12 +32,16 @@ impl JendelaTerminal {
         (f32::from(bentuk.width) / 10.0).round().max(1.0)
     }
 
-    pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
+    pub(super) fn sesuaikan_ukuran(
+        &mut self,
+        jendela: &mut Window,
+        konteks: &mut Context<JendelaTerminal>,
+    ) {
         let lebar_karakter = Self::lebar_karakter_grid(jendela);
         let ukuran = jendela.viewport_size();
 
         let lebar_tersedia = (f32::from(ukuran.width) - 16.0).max(1.0);
-        let tinggi_tersedia = (f32::from(ukuran.height) - 56.0).max(1.0);
+        let tinggi_tersedia = (f32::from(ukuran.height) - 60.0).max(1.0);
 
         let kolom = (lebar_tersedia / lebar_karakter)
             .floor()
@@ -57,8 +61,7 @@ impl JendelaTerminal {
             return;
         }
 
-        self.layar.ubah_tinggi(baris as usize);
-        self.motor.ubah_ukuran(kolom as usize, baris as usize);
+        self.keadaan.ubah_ukuran(kolom as usize, baris as usize);
         self.ukuran_pty = (kolom, baris);
 
         konteks.notify();

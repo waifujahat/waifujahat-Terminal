@@ -2,23 +2,24 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Session monitoring
- * Purpose: Polls PTY events and updates visible output.
+ * Purpose: Polls isolated PTY sessions and processes terminal output
  */
-
-use gpui::Context;
-use waifujahat_terminal::terminal::{PenandaShell, PesanTerminal, PosisiSeleksi, SesiTerminal};
-
-use super::JendelaTerminal;
 
 use std::time::Instant;
 
-impl JendelaTerminal {
+use gpui::Context;
+
+use waifujahat_terminal::terminal::{PenandaShell, PesanTerminal, PosisiSeleksi, SesiTerminal};
+
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
+
+impl RuangSesi {
     fn prompt_powershell_terlihat(&self) -> bool {
-        let Some(indeks_baris_awal) = self.siklus.indeks_baris_awal() else {
+        let Some(indeks_baris_awal) = self.keadaan.siklus.indeks_baris_awal() else {
             return false;
         };
 
-        let baris = self.layar.baris();
+        let baris = self.keadaan.layar.baris();
 
         let Some((indeks, teks)) = baris
             .iter()
@@ -35,15 +36,19 @@ impl JendelaTerminal {
     }
 
     fn selesaikan_perintah(&mut self, kode_keluar: Option<i32>) {
-        if !self.siklus.selesai_dengan_kode(Instant::now(), kode_keluar) {
+        if !self
+            .keadaan
+            .siklus
+            .selesai_dengan_kode(Instant::now(), kode_keluar)
+        {
             return;
         }
 
-        let Some(durasi) = self.siklus.durasi_terakhir() else {
+        let Some(durasi) = self.keadaan.siklus.durasi_terakhir() else {
             return;
         };
 
-        self.status = match self.siklus.kode_keluar_terakhir() {
+        self.status = match self.keadaan.siklus.kode_keluar_terakhir() {
             Some(0) => {
                 format!(
                     "Berhasil dalam {:.2} detik | Exit code: 0",
@@ -65,7 +70,7 @@ impl JendelaTerminal {
         };
     }
 
-    pub(super) fn periksa_keluaran(&mut self, konteks: &mut Context<Self>) -> bool {
+    pub(super) fn periksa_keluaran(&mut self, mode_grid: bool) -> bool {
         let mut berubah = false;
 
         for _ in 0..64 {
@@ -73,20 +78,16 @@ impl JendelaTerminal {
 
             match pesan {
                 Some(PesanTerminal::Keluaran(buffer)) => {
-                    self.layar.terima(&buffer);
+                    let layar_alternatif_sebelum = self.keadaan.motor.layar_alternatif_aktif();
 
-                    let layar_alternatif_sebelum = self.motor.layar_alternatif_aktif();
+                    let penanda_shell = self.keadaan.terima(&buffer);
 
-                    self.motor.terima(&buffer);
-
-                    let layar_alternatif_aktif = self.motor.layar_alternatif_aktif();
+                    let layar_alternatif_aktif = self.keadaan.motor.layar_alternatif_aktif();
 
                     if layar_alternatif_sebelum != layar_alternatif_aktif {
-                        self.seleksi.bersihkan();
+                        self.keadaan.seleksi.bersihkan();
                         self.arah_gulir_seleksi = 0;
                     }
-
-                    let penanda_shell = self.integrasi_shell.terima(&buffer);
 
                     for penanda in penanda_shell {
                         if let PenandaShell::PerintahSelesai(kode_keluar) = penanda {
@@ -94,19 +95,20 @@ impl JendelaTerminal {
                         }
                     }
 
-                    if self.siklus.berjalan()
+                    if self.keadaan.siklus.berjalan()
                         && !layar_alternatif_aktif
                         && self.prompt_powershell_terlihat()
                     {
                         self.selesaikan_perintah(None);
                     }
 
-                    while let Some(respons) = self.motor.ambil_respons() {
+                    while let Some(respons) = self.keadaan.motor.ambil_respons() {
                         if let Some(sesi) = &self.sesi
                             && let Err(kesalahan) = sesi.kirim_bytes(&respons)
                         {
                             self.status =
                                 format!("Gagal membalas permintaan terminal: {kesalahan}");
+
                             break;
                         }
                     }
@@ -117,7 +119,8 @@ impl JendelaTerminal {
                 Some(PesanTerminal::Kesalahan(pesan)) => {
                     self.status = pesan;
                     self.sesi = None;
-                    self.siklus.akhiri_sesi();
+                    self.keadaan.siklus.akhiri_sesi();
+
                     berubah = true;
                     break;
                 }
@@ -125,7 +128,8 @@ impl JendelaTerminal {
                 Some(PesanTerminal::Berakhir) => {
                     self.status = "Sesi PowerShell telah berakhir".into();
                     self.sesi = None;
-                    self.siklus.akhiri_sesi();
+                    self.keadaan.siklus.akhiri_sesi();
+
                     berubah = true;
                     break;
                 }
@@ -134,15 +138,17 @@ impl JendelaTerminal {
             }
         }
 
-        if self.mode_grid_aktif() && self.seleksi.sedang_memilih() && self.arah_gulir_seleksi != 0 {
-            let offset_sebelum = self.motor.offset_riwayat();
+        if mode_grid && self.keadaan.seleksi.sedang_memilih() && self.arah_gulir_seleksi != 0 {
+            let offset_sebelum = self.keadaan.motor.offset_riwayat();
 
-            self.motor
+            self.keadaan
+                .motor
                 .geser_riwayat(isize::from(self.arah_gulir_seleksi));
 
-            if self.motor.offset_riwayat() != offset_sebelum {
-                let indeks_awal = self.motor.indeks_awal_tampilan();
-                let tinggi = self.motor.ukuran().1;
+            if self.keadaan.motor.offset_riwayat() != offset_sebelum {
+                let indeks_awal = self.keadaan.motor.indeks_awal_tampilan();
+
+                let tinggi = self.keadaan.motor.ukuran().1;
 
                 let indeks_baris = if self.arah_gulir_seleksi > 0 {
                     indeks_awal
@@ -150,7 +156,8 @@ impl JendelaTerminal {
                     indeks_awal + tinggi.saturating_sub(1)
                 };
 
-                self.seleksi
+                self.keadaan
+                    .seleksi
                     .perbarui(PosisiSeleksi::baru(indeks_baris, self.kolom_gulir_seleksi));
 
                 berubah = true;
@@ -168,14 +175,28 @@ impl JendelaTerminal {
             }
         }
 
-        if berubah {
-            if !self.seleksi.sedang_memilih() {
-                self.gulir.scroll_to_bottom();
-            }
+        if berubah && !self.keadaan.seleksi.sedang_memilih() {
+            self.gulir.scroll_to_bottom();
+        }
 
+        berubah
+    }
+}
+
+impl JendelaTerminal {
+    pub(super) fn periksa_keluaran(&mut self, konteks: &mut Context<Self>) -> bool {
+        let mode_grid = self.ruang().mode_grid_aktif();
+
+        let mut berubah = false;
+
+        for (_, ruang) in self.manajer.iter_mut() {
+            berubah |= ruang.periksa_keluaran(mode_grid);
+        }
+
+        if berubah {
             konteks.notify();
         }
 
-        self.sesi.is_some()
+        true
     }
 }

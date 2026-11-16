@@ -2,39 +2,33 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Window state
- * Purpose: Owns GPUI window state and application initialization
+ * Purpose: Owns GPUI window state and managed terminal sessions
  */
 
 mod interaksi;
 mod interaksi_mouse;
+mod manajemen_sesi;
 mod pemantauan;
 mod pengukuran;
 mod render;
 mod render_grid;
+mod ruang_sesi;
+mod tab_sesi;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window};
-use waifujahat_terminal::terminal::{
-    LayarTerminal, MotorTerminal, ParserIntegrasiShell, SeleksiTerminal, SesiTerminal,
-    SiklusPerintah,
+use gpui::{
+    Context, FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Subscription,
+    Task, Window,
 };
+
+use waifujahat_terminal::terminal::ManajerSesi;
+
+use ruang_sesi::RuangSesi;
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
-    gulir: ScrollHandle,
-    layar: LayarTerminal,
-    motor: MotorTerminal,
-    sesi: Option<SesiTerminal>,
-    status: String,
-    batas_status_salin: Option<Instant>,
-    siklus: SiklusPerintah,
-    integrasi_shell: ParserIntegrasiShell,
-    seleksi: SeleksiTerminal,
-    arah_gulir_seleksi: i8,
-    kolom_gulir_seleksi: usize,
-    mouse_tui_ditekan: Option<(usize, usize)>,
-    ukuran_pty: (u16, u16),
+    manajer: ManajerSesi<RuangSesi>,
     _pengamat_ukuran: Subscription,
     _tugas_pantau: Task<()>,
 }
@@ -42,12 +36,12 @@ pub(crate) struct JendelaTerminal {
 impl JendelaTerminal {
     pub(crate) fn baru(jendela: &mut Window, konteks: &mut Context<Self>) -> Self {
         let fokus = konteks.focus_handle().tab_stop(true);
+
         jendela.focus(&fokus, konteks);
 
-        let (sesi, status) = match SesiTerminal::baru() {
-            Ok(sesi) => (Some(sesi), String::new()),
-            Err(kesalahan) => (None, format!("Gagal membuka PowerShell: {kesalahan}")),
-        };
+        let mut manajer = ManajerSesi::baru();
+
+        manajer.tambah(RuangSesi::baru());
 
         let pengamat_ukuran =
             konteks.observe_window_bounds(jendela, |terminal, jendela, konteks| {
@@ -70,32 +64,74 @@ impl JendelaTerminal {
             }
         });
 
-        let mut siklus = SiklusPerintah::baru();
-
-        if sesi.is_none() {
-            siklus.akhiri_sesi();
-        }
-
         let mut terminal = Self {
             fokus,
-            gulir: ScrollHandle::new(),
-            layar: LayarTerminal::baru(),
-            motor: MotorTerminal::baru(80, 24),
-            sesi,
-            status,
-            batas_status_salin: None,
-            siklus,
-            integrasi_shell: ParserIntegrasiShell::baru(),
-            seleksi: SeleksiTerminal::baru(),
-            arah_gulir_seleksi: 0,
-            kolom_gulir_seleksi: 0,
-            mouse_tui_ditekan: None,
-            ukuran_pty: (80, 24),
+            manajer,
             _pengamat_ukuran: pengamat_ukuran,
             _tugas_pantau: tugas_pantau,
         };
 
         terminal.sesuaikan_ukuran(jendela, konteks);
+
         terminal
+    }
+
+    fn ruang(&self) -> &RuangSesi {
+        self.manajer.aktif().expect("Sesi aktif tidak tersedia")
+    }
+
+    fn ruang_mut(&mut self) -> &mut RuangSesi {
+        self.manajer.aktif_mut().expect("Sesi aktif tidak tersedia")
+    }
+
+    pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
+        for (_, ruang) in self.manajer.iter_mut() {
+            ruang.sesuaikan_ukuran(jendela, konteks);
+        }
+    }
+
+    pub(super) fn proses_tombol(
+        &mut self,
+        kejadian: &KeyDownEvent,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        if self.tangani_tombol_sesi(kejadian, jendela, konteks) {
+            konteks.stop_propagation();
+            return;
+        }
+
+        self.ruang_mut().proses_tombol(kejadian, jendela, konteks);
+    }
+
+    pub(super) fn mouse_ditekan(
+        &mut self,
+        kejadian: &MouseDownEvent,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        jendela.focus(&self.fokus, konteks);
+
+        self.ruang_mut().mouse_ditekan(kejadian, jendela, konteks);
+    }
+
+    pub(super) fn mouse_digerakkan(
+        &mut self,
+        kejadian: &MouseMoveEvent,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        self.ruang_mut()
+            .mouse_digerakkan(kejadian, jendela, konteks);
+    }
+
+    pub(super) fn tangani_lepas_mouse_tui(
+        &mut self,
+        kejadian: &MouseUpEvent,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        self.ruang_mut()
+            .tangani_lepas_mouse_tui(kejadian, jendela, konteks);
     }
 }

@@ -8,9 +8,9 @@
 use gpui::{Context, Modifiers, MouseDownEvent, MouseUpEvent, Pixels, Point, Window};
 use waifujahat_terminal::terminal::{AksiMouse, PengubahMouse, TombolMouse, sandi_mouse_sgr};
 
-use super::JendelaTerminal;
+use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-impl JendelaTerminal {
+impl RuangSesi {
     fn koordinat_mouse_grid(
         &self,
         posisi: Point<Pixels>,
@@ -31,7 +31,7 @@ impl JendelaTerminal {
         let kolom = (x / lebar_karakter).floor() as usize;
         let baris = (y / 18.0).floor() as usize;
 
-        let (jumlah_kolom, jumlah_baris) = self.motor.ukuran();
+        let (jumlah_kolom, jumlah_baris) = self.keadaan.motor.ukuran();
 
         (kolom < jumlah_kolom && baris < jumlah_baris).then_some((kolom, baris))
     }
@@ -62,11 +62,11 @@ impl JendelaTerminal {
         &mut self,
         kejadian: &MouseDownEvent,
         jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) -> bool {
         if !self.mode_grid_aktif()
-            || !self.motor.pelaporan_mouse_aktif()
-            || !self.motor.mouse_sgr_aktif()
+            || !self.keadaan.motor.pelaporan_mouse_aktif()
+            || !self.keadaan.motor.mouse_sgr_aktif()
             || kejadian.modifiers.shift
             || self.sesi.is_none()
         {
@@ -84,7 +84,7 @@ impl JendelaTerminal {
         );
 
         self.mouse_tui_ditekan = Some(posisi);
-        self.seleksi.bersihkan();
+        self.keadaan.seleksi.bersihkan();
         self.arah_gulir_seleksi = 0;
 
         konteks.notify();
@@ -95,26 +95,26 @@ impl JendelaTerminal {
         &mut self,
         kejadian: &MouseUpEvent,
         jendela: &mut Window,
-        konteks: &mut Context<Self>,
+        konteks: &mut Context<JendelaTerminal>,
     ) {
         if let Some(posisi_sebelum) = self.mouse_tui_ditekan.take() {
             let posisi = self
                 .koordinat_mouse_grid(kejadian.position, jendela)
                 .unwrap_or(posisi_sebelum);
 
-            if self.motor.pelaporan_mouse_aktif() && self.motor.mouse_sgr_aktif() {
+            if self.keadaan.motor.pelaporan_mouse_aktif() && self.keadaan.motor.mouse_sgr_aktif() {
                 self.kirim_mouse_tui(
                     AksiMouse::Lepas(TombolMouse::Kiri),
                     posisi,
                     &kejadian.modifiers,
                 );
             }
-        } else if let Some(posisi) = self.seleksi.posisi_klik() {
+        } else if let Some(posisi) = self.keadaan.seleksi.posisi_klik() {
             self.pindah_kursor_mouse(posisi);
         }
 
         self.arah_gulir_seleksi = 0;
-        self.seleksi.selesai();
+        self.keadaan.seleksi.selesai();
         konteks.notify();
     }
 }

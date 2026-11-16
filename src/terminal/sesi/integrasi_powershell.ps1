@@ -75,3 +75,8 @@ function global:prompt {
 
     & $global:WaifujahatPromptAsli
 }
+
+[Console]::WriteLine()
+[Console]::WriteLine('Waifujahat Terminal 0.1.0')
+[Console]::WriteLine('Copyright (C) 2026 Nurwidhi Maulana Nugraha (waifujahat)')
+[Console]::WriteLine()

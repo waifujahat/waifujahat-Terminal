@@ -1,0 +1,52 @@
+/*
+ * Waifujahat Terminal
+ * Author : waifujahat
+ * Module : Interface / Session workspace
+ * Purpose: Owns terminal session and its presentation state
+ */
+
+use std::time::Instant;
+
+use gpui::ScrollHandle;
+
+use waifujahat_terminal::terminal::{KeadaanSesi, SesiTerminal};
+
+pub(super) struct RuangSesi {
+    pub(super) keadaan: KeadaanSesi,
+    pub(super) sesi: Option<SesiTerminal>,
+    pub(super) gulir: ScrollHandle,
+    pub(super) status: String,
+    pub(super) batas_status_salin: Option<Instant>,
+    pub(super) arah_gulir_seleksi: i8,
+    pub(super) kolom_gulir_seleksi: usize,
+    pub(super) mouse_tui_ditekan: Option<(usize, usize)>,
+    pub(super) ukuran_pty: (u16, u16),
+}
+
+impl RuangSesi {
+    pub(super) fn baru() -> Self {
+        let mut keadaan = KeadaanSesi::baru(80, 24);
+
+        let (sesi, status) = match SesiTerminal::baru() {
+            Ok(sesi) => (Some(sesi), String::new()),
+
+            Err(kesalahan) => {
+                keadaan.siklus.akhiri_sesi();
+
+                (None, format!("Gagal membuka PowerShell: {kesalahan}"))
+            }
+        };
+
+        Self {
+            keadaan,
+            sesi,
+            gulir: ScrollHandle::new(),
+            status,
+            batas_status_salin: None,
+            arah_gulir_seleksi: 0,
+            kolom_gulir_seleksi: 0,
+            mouse_tui_ditekan: None,
+            ukuran_pty: (80, 24),
+        }
+    }
+}
