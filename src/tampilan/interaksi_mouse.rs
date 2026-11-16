@@ -5,10 +5,7 @@
  * Purpose: Forwards mouse input to interactive terminal applications
  */
 
-use gpui::{
-    Context, Font, Modifiers, MouseDownEvent, MouseUpEvent, Pixels, Point, TextRun, Window, px,
-    white,
-};
+use gpui::{Context, Modifiers, MouseDownEvent, MouseUpEvent, Pixels, Point, Window};
 use waifujahat_terminal::terminal::{AksiMouse, PengubahMouse, TombolMouse, sandi_mouse_sgr};
 
 use super::JendelaTerminal;
@@ -22,25 +19,7 @@ impl JendelaTerminal {
         let batas = self.gulir.bounds_for_item(0)?;
         let offset = self.gulir.offset();
 
-        let contoh = "MMMMMMMMMM";
-
-        let run = TextRun {
-            len: contoh.len(),
-            font: Font {
-                family: "Consolas".into(),
-                ..Default::default()
-            },
-            color: white(),
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        };
-
-        let bentuk = jendela
-            .text_system()
-            .shape_line(contoh.into(), px(14.0), &[run], None);
-
-        let lebar_karakter = (f32::from(bentuk.width) / 10.0).max(1.0);
+        let lebar_karakter = Self::lebar_karakter_grid(jendela);
 
         let x = f32::from(posisi.x - (batas.left() + offset.x));
         let y = f32::from(posisi.y - (batas.top() + offset.y));
@@ -130,6 +109,8 @@ impl JendelaTerminal {
                     &kejadian.modifiers,
                 );
             }
+        } else if let Some(posisi) = self.seleksi.posisi_klik() {
+            self.pindah_kursor_mouse(posisi);
         }
 
         self.arah_gulir_seleksi = 0;

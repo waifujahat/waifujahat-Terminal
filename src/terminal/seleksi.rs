@@ -111,7 +111,15 @@ impl SeleksiTerminal {
         self.sedang_memilih = false;
     }
 
-    fn rentang(&self) -> Option<(PosisiSeleksi, PosisiSeleksi)> {
+    pub fn posisi_klik(&self) -> Option<PosisiSeleksi> {
+        if self.sedang_memilih && self.awal == self.akhir {
+            self.awal
+        } else {
+            None
+        }
+    }
+
+    pub fn rentang(&self) -> Option<(PosisiSeleksi, PosisiSeleksi)> {
         let awal = self.awal?;
         let akhir = self.akhir?;
 

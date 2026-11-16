@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Terminal sizing
- * Purpose: Calculates PTY cell dimensions from the window viewport.
+ * Purpose: Calculates PTY cell dimensions from the window viewport
  */
 
 use gpui::{Context, Font, TextRun, Window, px, white};
@@ -10,7 +10,7 @@ use gpui::{Context, Font, TextRun, Window, px, white};
 use super::JendelaTerminal;
 
 impl JendelaTerminal {
-    pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
+    pub(super) fn lebar_karakter_grid(jendela: &mut Window) -> f32 {
         let contoh = "MMMMMMMMMM";
 
         let run = TextRun {
@@ -29,7 +29,11 @@ impl JendelaTerminal {
             .text_system()
             .shape_line(contoh.into(), px(14.0), &[run], None);
 
-        let lebar_karakter = (f32::from(bentuk.width) / 10.0).max(1.0);
+        (f32::from(bentuk.width) / 10.0).round().max(1.0)
+    }
+
+    pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
+        let lebar_karakter = Self::lebar_karakter_grid(jendela);
         let ukuran = jendela.viewport_size();
 
         let lebar_tersedia = (f32::from(ukuran.width) - 16.0).max(1.0);

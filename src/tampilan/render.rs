@@ -23,20 +23,16 @@ impl JendelaTerminal {
             baris.push(String::new());
         }
 
-        let indeks_editor = self.layar.indeks_baris_kursor().min(baris.len() - 1);
+        let indeks_kursor = self.layar.indeks_baris_kursor().min(baris.len() - 1);
 
         let indeks_terakhir_berisi = baris
             .iter()
             .rposition(|teks| !teks.trim().is_empty())
             .unwrap_or(0);
 
-        let indeks_akhir = indeks_editor.max(indeks_terakhir_berisi);
+        let indeks_akhir = indeks_kursor.max(indeks_terakhir_berisi);
 
         baris.truncate(indeks_akhir + 1);
-
-        if !self.perintah_berjalan && !self.mode_input_shell {
-            baris[indeks_editor].push_str(self.masukan.teks());
-        }
 
         baris
     }
@@ -51,21 +47,9 @@ impl JendelaTerminal {
         let baris = self.baris_terminal();
         let jumlah_baris = baris.len();
 
-        let indeks_editor = self
-            .layar
-            .indeks_baris_kursor()
-            .min(jumlah_baris.saturating_sub(1));
-
         let baris_motor = self.motor.baris_layar();
         let warna_motor = self.motor.baris_berwarna(WARNA_TEKS, WARNA_LATAR);
         let pergeseran = jumlah_baris.saturating_sub(baris_motor.len());
-
-        let awalan = self
-            .layar
-            .baris()
-            .get(indeks_editor)
-            .cloned()
-            .unwrap_or_default();
 
         let mut keluaran = div()
             .id("keluaran-terminal")
@@ -86,11 +70,7 @@ impl JendelaTerminal {
             );
 
         for (indeks, teks) in baris.into_iter().enumerate() {
-            let baris_editor = indeks == indeks_editor;
-
-            let tampilan = if baris_editor && !self.perintah_berjalan && !self.mode_input_shell {
-                self.masukan.tampilkan(&awalan)
-            } else if teks.is_empty() {
+            let tampilan = if teks.is_empty() {
                 " ".to_string()
             } else {
                 teks.clone()
@@ -121,7 +101,7 @@ impl JendelaTerminal {
                             .child(dipilih),
                     )
                     .child(div().whitespace_nowrap().child(sesudah));
-            } else if !baris_editor || self.perintah_berjalan || self.mode_input_shell {
+            } else {
                 let indeks_motor = indeks.checked_sub(pergeseran);
 
                 let baris_cocok = indeks_motor
@@ -146,8 +126,6 @@ impl JendelaTerminal {
                 } else {
                     elemen_baris = elemen_baris.child(div().whitespace_nowrap().child(tampilan));
                 }
-            } else {
-                elemen_baris = elemen_baris.child(div().whitespace_nowrap().child(tampilan));
             }
 
             keluaran = keluaran.child(elemen_baris);
@@ -158,7 +136,7 @@ impl JendelaTerminal {
 }
 
 impl Render for JendelaTerminal {
-    fn render(&mut self, _jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
         let gambar_latar = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("assets")
             .join("images")
@@ -216,7 +194,7 @@ impl Render for JendelaTerminal {
             .child(self.buat_informasi_terminal());
 
         if mode_grid {
-            halaman = halaman.child(self.buat_keluaran_grid(konteks));
+            halaman = halaman.child(self.buat_keluaran_grid(jendela, konteks));
         } else {
             halaman = halaman.child(self.buat_keluaran_terminal(konteks));
         }
@@ -237,9 +215,9 @@ impl Render for JendelaTerminal {
                 } else if self.perintah_berjalan || self.motor.layar_alternatif_aktif() {
                     "Running - Esc untuk membatalkan"
                 } else if self.konfirmasi_perintah_aktif {
-                    "Toogle Konfirmasi : ON (Tekan F8)"
+                    "Toggle Konfirmasi : ON (Tekan F8)"
                 } else {
-                    "Toogle Konfirmasi : OFF (Tekan F8)"
+                    "Toggle Konfirmasi : OFF (Tekan F8)"
                 }),
         )
     }

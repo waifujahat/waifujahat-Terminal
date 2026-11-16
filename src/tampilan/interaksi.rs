@@ -2,8 +2,10 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Interaction
- * Purpose: Handles keyboard, mouse, clipboard, and command history.
+ * Purpose: Handles keyboard, mouse, clipboard and PTY input
  */
+
+use std::time::{Duration, Instant};
 
 use gpui::{
     ClipboardItem, Context, Font, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
@@ -13,8 +15,6 @@ use gpui::{
 use waifujahat_terminal::terminal::{PosisiSeleksi, TombolTerminal, sandi_tempel};
 
 use super::JendelaTerminal;
-
-use std::time::{Duration, Instant};
 
 impl JendelaTerminal {
     fn posisi_dari_mouse(
@@ -70,6 +70,19 @@ impl JendelaTerminal {
 
         if teks.is_empty() {
             return Some(PosisiSeleksi::baru(indeks_seleksi, 0));
+        }
+
+        if mode_grid {
+            let lebar = Self::lebar_karakter_grid(jendela);
+
+            let posisi_x = f32::from(posisi.x - (batas.left() + offset.x));
+
+            let kolom = self
+                .motor
+                .indeks_karakter_grid(indeks_baris, posisi_x / lebar)
+                .min(teks.chars().count());
+
+            return Some(PosisiSeleksi::baru(indeks_seleksi, kolom));
         }
 
         let font = Font {
@@ -138,6 +151,7 @@ impl JendelaTerminal {
 
         konteks.notify();
     }
+
     pub(super) fn mouse_digerakkan(
         &mut self,
         kejadian: &MouseMoveEvent,
@@ -217,30 +231,19 @@ impl JendelaTerminal {
             self.motor.kembali_ke_bawah();
         }
 
-        let aplikasi_interaktif =
-            self.perintah_berjalan || self.motor.layar_alternatif_aktif() || self.mode_input_shell;
+        let Some(sesi) = &self.sesi else {
+            self.status = "Sesi PowerShell tidak tersedia".into();
+            konteks.notify();
+            return;
+        };
 
-        if aplikasi_interaktif {
-            let Some(sesi) = &self.sesi else {
-                self.status = "Sesi PowerShell tidak tersedia".into();
-                konteks.notify();
-                return;
-            };
+        let berbingkai = self.motor.tempel_berbingkai_aktif();
+        let data = sandi_tempel(&teks, berbingkai);
 
-            let berbingkai = self.motor.tempel_berbingkai_aktif();
-            let data = sandi_tempel(&teks, berbingkai);
-
-            if let Err(kesalahan) = sesi.kirim_bytes(&data) {
-                self.status = format!("Gagal menempel teks: {kesalahan}");
-                konteks.notify();
-                return;
-            }
-        } else {
-            let teks = teks.replace("\r\n", " ").replace(['\n', '\r'], " ");
-
-            self.masukan.sisipkan(&teks);
-            self.selesai_navigasi_riwayat();
-            self.seleksi.bersihkan();
+        if let Err(kesalahan) = sesi.kirim_bytes(&data) {
+            self.status = format!("Gagal menempel teks: {kesalahan}");
+            konteks.notify();
+            return;
         }
 
         self.status = "Paste".into();
@@ -248,33 +251,6 @@ impl JendelaTerminal {
 
         self.gulir.scroll_to_bottom();
         konteks.notify();
-    }
-
-    fn kirim_perintah(&mut self) {
-        let Some(sesi) = &self.sesi else {
-            self.status = "Sesi PowerShell tidak tersedia".into();
-            return;
-        };
-
-        let perintah = self.masukan.ambil();
-
-        if let Err(kesalahan) = sesi.kirim(&format!("{perintah}\r")) {
-            self.masukan.ganti(perintah);
-            self.status = format!("Gagal mengirim perintah: {kesalahan}");
-            return;
-        }
-
-        self.indeks_baris_sebelum_perintah = self
-            .layar
-            .baris()
-            .iter()
-            .rposition(|baris| !baris.trim().is_empty())
-            .unwrap_or(0);
-
-        self.perintah_berjalan = !perintah.trim().is_empty();
-        self.riwayat.catat(perintah);
-        self.seleksi.bersihkan();
-        self.status.clear();
     }
 
     fn kirim_perintah_shell(&mut self) {
@@ -301,44 +277,6 @@ impl JendelaTerminal {
         self.status.clear();
     }
 
-    fn perintah_sebelumnya(&mut self) {
-        if let Some(perintah) = self.riwayat.sebelumnya(self.masukan.teks()) {
-            self.masukan.ganti(perintah);
-        }
-    }
-
-    fn perintah_berikutnya(&mut self) {
-        if let Some(perintah) = self.riwayat.berikutnya() {
-            self.masukan.ganti(perintah);
-        }
-    }
-
-    fn selesai_navigasi_riwayat(&mut self) {
-        self.riwayat.selesai();
-    }
-
-    fn hentikan_perintah(&mut self) {
-        self.masukan.bersihkan();
-        self.selesai_navigasi_riwayat();
-        self.seleksi.bersihkan();
-
-        self.status = match &self.sesi {
-            Some(sesi) => match sesi.kirim_tombol(TombolTerminal::Kontrol('c')) {
-                Ok(()) => "Esc berhasil".into(),
-
-                Err(kesalahan) => {
-                    format!("Gagal mengirim interupsi: {kesalahan}")
-                }
-            },
-
-            None => "Sesi PowerShell tidak tersedia".into(),
-        };
-    }
-
-    fn proses_escape(&mut self) {
-        self.hentikan_perintah();
-    }
-
     fn kirim_input_langsung(&mut self, tombol: TombolTerminal<'_>) {
         let Some(sesi) = &self.sesi else {
             self.status = "Sesi PowerShell tidak tersedia".into();
@@ -350,6 +288,161 @@ impl JendelaTerminal {
         }
     }
 
+    pub(super) fn pindah_kursor_mouse(&mut self, posisi: PosisiSeleksi) {
+        if !self.mode_grid_aktif()
+            || self.perintah_berjalan
+            || self.menunggu_konfirmasi_perintah
+            || self.motor.layar_alternatif_aktif()
+            || self.motor.offset_riwayat() > 0
+        {
+            return;
+        }
+
+        let (baris_kursor, kolom_kursor) = self.motor.posisi_kursor();
+
+        let indeks_baris = self.motor.jumlah_baris_riwayat() + baris_kursor;
+
+        if posisi.baris != indeks_baris {
+            return;
+        }
+
+        let baris = self.motor.semua_baris();
+
+        let Some(teks) = baris.get(indeks_baris) else {
+            return;
+        };
+
+        if !teks.starts_with("PS ")
+            || !teks.is_ascii()
+            || teks.len() >= self.motor.ukuran().0
+            || kolom_kursor > teks.len()
+            || baris[indeks_baris + 1..]
+                .iter()
+                .any(|teks| !teks.trim().is_empty())
+        {
+            return;
+        }
+
+        let Some(awal_input) = teks.find("> ").map(|indeks| indeks + 2) else {
+            return;
+        };
+
+        if posisi.kolom < awal_input || posisi.kolom > teks.len() || kolom_kursor < awal_input {
+            return;
+        }
+
+        let (tombol, jumlah) = if posisi.kolom < kolom_kursor {
+            (TombolTerminal::Kiri, kolom_kursor - posisi.kolom)
+        } else {
+            (TombolTerminal::Kanan, posisi.kolom - kolom_kursor)
+        };
+
+        if jumlah == 0 {
+            return;
+        }
+
+        let data: Vec<u8> = std::iter::repeat_n(tombol, jumlah)
+            .filter_map(TombolTerminal::ke_bytes)
+            .flatten()
+            .collect();
+
+        let Some(sesi) = &self.sesi else {
+            return;
+        };
+        if let Err(kesalahan) = sesi.kirim_bytes(&data) {
+            self.status = format!("Gagal memindahkan kursor: {kesalahan}");
+        }
+    }
+
+    fn rentang_seleksi_input(&self) -> Option<(usize, usize)> {
+        if !self.mode_grid_aktif()
+            || self.perintah_berjalan
+            || self.motor.layar_alternatif_aktif()
+            || self.motor.offset_riwayat() > 0
+            || self.sesi.is_none()
+        {
+            return None;
+        }
+
+        let (awal, akhir) = self.seleksi.rentang()?;
+        let (baris_kursor, kolom_kursor) = self.motor.posisi_kursor();
+
+        let indeks_baris = self.motor.jumlah_baris_riwayat() + baris_kursor;
+
+        if awal.baris != indeks_baris || akhir.baris != indeks_baris {
+            return None;
+        }
+
+        let baris = self.motor.semua_baris();
+        let teks = baris.get(indeks_baris)?;
+
+        if !teks.starts_with("PS ")
+            || !teks.is_ascii()
+            || teks.len() >= self.motor.ukuran().0
+            || kolom_kursor > teks.len()
+            || baris[indeks_baris + 1..]
+                .iter()
+                .any(|teks| !teks.trim().is_empty())
+        {
+            return None;
+        }
+
+        let awal_input = teks.find("> ")? + 2;
+
+        if kolom_kursor < awal_input
+            || awal.kolom < awal_input
+            || akhir.kolom > teks.len()
+            || awal.kolom >= akhir.kolom
+        {
+            return None;
+        }
+
+        Some((awal.kolom - awal_input, akhir.kolom - awal.kolom))
+    }
+
+    fn hapus_seleksi_input(&mut self, tombol: TombolTerminal<'_>) -> bool {
+        if self.seleksi.rentang().is_none() {
+            return false;
+        }
+
+        let Some((mulai, panjang)) = self.rentang_seleksi_input() else {
+            self.status = "Seleksi bukan bagian dari perintah aktif".into();
+            return true;
+        };
+
+        let data: Vec<u8> = std::iter::once(TombolTerminal::Awal)
+            .chain(std::iter::repeat_n(TombolTerminal::Kanan, mulai))
+            .chain(std::iter::repeat_n(TombolTerminal::PilihKanan, panjang))
+            .chain(std::iter::once(tombol))
+            .filter_map(TombolTerminal::ke_bytes)
+            .flatten()
+            .collect();
+
+        let Some(sesi) = &self.sesi else {
+            self.status = "Sesi PowerShell tidak tersedia".into();
+            return true;
+        };
+
+        if let Err(kesalahan) = sesi.kirim_bytes(&data) {
+            self.status = format!("Gagal menghapus seleksi: {kesalahan}");
+            return true;
+        }
+
+        self.seleksi.bersihkan();
+        self.status.clear();
+
+        true
+    }
+
+    fn ajukan_perintah_shell(&mut self) {
+        if self.konfirmasi_perintah_aktif {
+            self.menunggu_konfirmasi_perintah = true;
+            self.status.clear();
+        } else {
+            self.kirim_perintah_shell();
+        }
+    }
+
     pub(super) fn proses_tombol(
         &mut self,
         kejadian: &KeyDownEvent,
@@ -357,10 +450,12 @@ impl JendelaTerminal {
         konteks: &mut Context<Self>,
     ) {
         let tombol = &kejadian.keystroke;
+        let nama_tombol = tombol.key.to_ascii_lowercase();
 
-        if !self.perintah_berjalan
-            && !self.motor.layar_alternatif_aktif()
-            && tombol.key.eq_ignore_ascii_case("f8")
+        let shell_siap = !self.perintah_berjalan && !self.motor.layar_alternatif_aktif();
+
+        if shell_siap
+            && nama_tombol == "f8"
             && !tombol.modifiers.control
             && !tombol.modifiers.platform
             && !tombol.modifiers.alt
@@ -385,15 +480,11 @@ impl JendelaTerminal {
                 !tombol.modifiers.control && !tombol.modifiers.platform && !tombol.modifiers.alt;
 
             if tanpa_pengubah {
-                match tombol.key.to_ascii_lowercase().as_str() {
+                match nama_tombol.as_str() {
                     "y" => {
                         self.menunggu_konfirmasi_perintah = false;
+                        self.kirim_perintah_shell();
 
-                        if self.mode_input_shell {
-                            self.kirim_perintah_shell();
-                        } else {
-                            self.kirim_perintah();
-                        }
                         self.gulir.scroll_to_bottom();
                         konteks.notify();
                         return;
@@ -401,19 +492,15 @@ impl JendelaTerminal {
 
                     "n" | "escape" | "esc" => {
                         self.menunggu_konfirmasi_perintah = false;
-
-                        if self.mode_input_shell {
-                            self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
-                        }
+                        self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
 
                         self.status = "Perintah tidak dijalankan".into();
+
                         konteks.notify();
                         return;
                     }
 
-                    "enter" => {
-                        return;
-                    }
+                    "enter" => return,
 
                     _ => {}
                 }
@@ -433,7 +520,7 @@ impl JendelaTerminal {
             let jumlah_baris = tinggi.saturating_sub(1).max(1);
             let langkah = isize::try_from(jumlah_baris).unwrap_or(isize::MAX);
 
-            let perpindahan = match tombol.key.to_ascii_lowercase().as_str() {
+            let perpindahan = match nama_tombol.as_str() {
                 "pageup" | "page-up" | "page_up" => langkah,
                 "pagedown" | "page-down" | "page_down" => -langkah,
                 _ => 0,
@@ -449,11 +536,7 @@ impl JendelaTerminal {
         }
 
         if tombol.modifiers.control || tombol.modifiers.platform {
-            let aplikasi_interaktif = self.perintah_berjalan
-                || self.motor.layar_alternatif_aktif()
-                || self.mode_input_shell;
-
-            match tombol.key.to_ascii_lowercase().as_str() {
+            match nama_tombol.as_str() {
                 "c" => {
                     let ada_seleksi = self
                         .seleksi
@@ -462,14 +545,8 @@ impl JendelaTerminal {
 
                     if ada_seleksi {
                         self.salin_seleksi(konteks);
-                    } else if aplikasi_interaktif {
-                        self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
                     } else {
-                        self.masukan.bersihkan();
-                        self.selesai_navigasi_riwayat();
-                        self.seleksi.bersihkan();
-
-                        self.status = "Masukan dibatalkan".into();
+                        self.kirim_input_langsung(TombolTerminal::Kontrol('c'));
                     }
                 }
 
@@ -478,28 +555,14 @@ impl JendelaTerminal {
                 }
 
                 "a" => {
-                    if aplikasi_interaktif {
-                        self.kirim_input_langsung(TombolTerminal::Kontrol('a'));
-                    } else {
-                        let baris = self.baris_seleksi();
-                        self.seleksi.pilih_semua(&baris);
-                    }
+                    self.kirim_input_langsung(TombolTerminal::Kontrol('a'));
                 }
 
-                "m" | "j"
-                    if self.mode_input_shell
-                        && !self.perintah_berjalan
-                        && !self.motor.layar_alternatif_aktif() =>
-                {
-                    if self.konfirmasi_perintah_aktif {
-                        self.menunggu_konfirmasi_perintah = true;
-                        self.status.clear();
-                    } else {
-                        self.kirim_perintah_shell();
-                    }
+                "m" | "j" if shell_siap => {
+                    self.ajukan_perintah_shell();
                 }
 
-                _ if aplikasi_interaktif && tombol.modifiers.control && !tombol.modifiers.alt => {
+                _ if tombol.modifiers.control && !tombol.modifiers.alt => {
                     let mut karakter = tombol.key.chars();
 
                     if let Some(huruf) = karakter.next()
@@ -521,145 +584,96 @@ impl JendelaTerminal {
             return;
         }
 
+        let tombol_hapus = match nama_tombol.as_str() {
+            "backspace" => Some(TombolTerminal::HapusSebelum),
+            "delete" => Some(TombolTerminal::HapusSesudah),
+            _ => None,
+        };
+
+        if let Some(tombol_hapus) = tombol_hapus
+            && self.hapus_seleksi_input(tombol_hapus)
+        {
+            konteks.notify();
+            return;
+        }
+
         if self.mode_grid_aktif() && self.motor.offset_riwayat() > 0 {
             self.motor.kembali_ke_bawah();
             self.seleksi.bersihkan();
         }
 
-        if self.perintah_berjalan || self.motor.layar_alternatif_aktif() || self.mode_input_shell {
-            match tombol.key.to_ascii_lowercase().as_str() {
-                "escape" | "esc" => {
-                    self.kirim_input_langsung(TombolTerminal::Escape);
-                }
-
-                "enter" => {
-                    if self.mode_input_shell
-                        && !self.perintah_berjalan
-                        && !self.motor.layar_alternatif_aktif()
-                    {
-                        if self.konfirmasi_perintah_aktif {
-                            self.menunggu_konfirmasi_perintah = true;
-                            self.status.clear();
-                        } else {
-                            self.kirim_perintah_shell();
-                        }
-                    } else {
-                        self.kirim_input_langsung(TombolTerminal::Enter);
-                    }
-                }
-
-                "tab" | "backtab" => {
-                    let tombol_tab =
-                        if tombol.modifiers.shift || tombol.key.eq_ignore_ascii_case("backtab") {
-                            TombolTerminal::TabMundur
-                        } else {
-                            TombolTerminal::Tab
-                        };
-
-                    self.kirim_input_langsung(tombol_tab);
-                }
-
-                "backspace" => {
-                    self.kirim_input_langsung(TombolTerminal::HapusSebelum);
-                }
-
-                "delete" => {
-                    self.kirim_input_langsung(TombolTerminal::HapusSesudah);
-                }
-
-                "up" | "arrowup" => {
-                    self.kirim_input_langsung(TombolTerminal::Atas);
-                }
-
-                "down" | "arrowdown" => {
-                    self.kirim_input_langsung(TombolTerminal::Bawah);
-                }
-
-                "left" | "arrowleft" => {
-                    self.kirim_input_langsung(TombolTerminal::Kiri);
-                }
-
-                "right" | "arrowright" => {
-                    self.kirim_input_langsung(TombolTerminal::Kanan);
-                }
-
-                "home" => {
-                    self.kirim_input_langsung(TombolTerminal::Awal);
-                }
-
-                "end" => {
-                    self.kirim_input_langsung(TombolTerminal::Akhir);
-                }
-
-                _ => {
-                    if let Some(teks) = tombol.key_char.as_deref()
-                        && !teks.chars().any(char::is_control)
-                    {
-                        self.kirim_input_langsung(TombolTerminal::Teks(teks));
-                    }
-                }
+        match nama_tombol.as_str() {
+            "escape" | "esc" => {
+                self.kirim_input_langsung(TombolTerminal::Escape);
             }
 
-            self.gulir.scroll_to_bottom();
-            konteks.notify();
-            return;
-        }
-
-        match tombol.key.to_ascii_lowercase().as_str() {
-            "left" | "arrowleft" => {
-                self.masukan.pindah_kiri();
-            }
-
-            "right" | "arrowright" => {
-                self.masukan.pindah_kanan();
-            }
-
-            "home" => {
-                self.masukan.pindah_awal();
-            }
-
-            "end" => {
-                self.masukan.pindah_akhir();
-            }
-
-            "backspace" => {
-                self.masukan.hapus_sebelum();
-                self.selesai_navigasi_riwayat();
-            }
-
-            "delete" => {
-                self.masukan.hapus_sesudah();
-                self.selesai_navigasi_riwayat();
-            }
-
-            "up" | "arrowup" => {
-                self.perintah_sebelumnya();
-            }
-
-            "down" | "arrowdown" => {
-                self.perintah_berikutnya();
+            "enter" if shell_siap => {
+                self.ajukan_perintah_shell();
             }
 
             "enter" => {
-                if !self.konfirmasi_perintah_aktif || self.masukan.teks().trim().is_empty() {
-                    self.kirim_perintah();
-                } else {
-                    self.menunggu_konfirmasi_perintah = true;
-                    self.status.clear();
-                }
+                self.kirim_input_langsung(TombolTerminal::Enter);
             }
 
-            "escape" | "esc" => {
-                self.proses_escape();
+            "tab" | "backtab" => {
+                let tombol_tab = if tombol.modifiers.shift || nama_tombol == "backtab" {
+                    TombolTerminal::TabMundur
+                } else {
+                    TombolTerminal::Tab
+                };
+
+                self.kirim_input_langsung(tombol_tab);
+            }
+
+            "backspace" => {
+                self.kirim_input_langsung(TombolTerminal::HapusSebelum);
+            }
+
+            "delete" => {
+                self.kirim_input_langsung(TombolTerminal::HapusSesudah);
+            }
+
+            "up" | "arrowup" => {
+                self.kirim_input_langsung(TombolTerminal::Atas);
+            }
+
+            "down" | "arrowdown" => {
+                self.kirim_input_langsung(TombolTerminal::Bawah);
+            }
+
+            "left" | "arrowleft" => {
+                let tombol_terminal = if tombol.modifiers.shift {
+                    TombolTerminal::PilihKiri
+                } else {
+                    TombolTerminal::Kiri
+                };
+
+                self.kirim_input_langsung(tombol_terminal);
+            }
+
+            "right" | "arrowright" => {
+                let tombol_terminal = if tombol.modifiers.shift {
+                    TombolTerminal::PilihKanan
+                } else {
+                    TombolTerminal::Kanan
+                };
+
+                self.kirim_input_langsung(tombol_terminal);
+            }
+
+            "home" => {
+                self.kirim_input_langsung(TombolTerminal::Awal);
+            }
+
+            "end" => {
+                self.kirim_input_langsung(TombolTerminal::Akhir);
             }
 
             _ => {
-                if let Some(karakter) = &tombol.key_char
-                    && !karakter.chars().any(char::is_control)
+                if let Some(teks) = tombol.key_char.as_deref()
+                    && !teks.chars().any(char::is_control)
                 {
-                    self.masukan.sisipkan(karakter);
-                    self.selesai_navigasi_riwayat();
-                    self.seleksi.bersihkan();
+                    self.kirim_input_langsung(TombolTerminal::Teks(teks));
                 }
             }
         }

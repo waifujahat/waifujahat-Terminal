@@ -18,6 +18,8 @@ pub enum TombolTerminal<'a> {
     Bawah,
     Kiri,
     Kanan,
+    PilihKiri,
+    PilihKanan,
     Awal,
     Akhir,
     Kontrol(char),
@@ -39,6 +41,8 @@ impl TombolTerminal<'_> {
             Self::Bawah => b"\x1b[B",
             Self::Kiri => b"\x1b[D",
             Self::Kanan => b"\x1b[C",
+            Self::PilihKiri => b"\x1b[1;2D",
+            Self::PilihKanan => b"\x1b[1;2C",
             Self::Awal => b"\x1b[H",
             Self::Akhir => b"\x1b[F",
             Self::Kontrol(karakter) => {

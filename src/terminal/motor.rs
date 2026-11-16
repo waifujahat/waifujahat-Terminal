@@ -249,6 +249,35 @@ impl MotorTerminal {
         hasil
     }
 
+    pub fn indeks_karakter_grid(&self, baris: usize, posisi: f32) -> usize {
+        let (jumlah_kolom, _) = self.ukuran();
+        let mut indeks_karakter = 0;
+
+        for kolom in 0..jumlah_kolom {
+            let Some(sel) = self.sel(baris, kolom) else {
+                break;
+            };
+
+            if sel.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                continue;
+            }
+
+            let lebar = if sel.flags.contains(Flags::WIDE_CHAR) {
+                2.0
+            } else {
+                1.0
+            };
+
+            if posisi < kolom as f32 + lebar / 2.0 {
+                return indeks_karakter;
+            }
+
+            indeks_karakter += 1 + sel.zerowidth().map_or(0, |tambahan| tambahan.len());
+        }
+
+        indeks_karakter
+    }
+
     pub fn baris_berwarna(&self, warna_teks: u32, warna_latar: u32) -> Vec<Vec<PotonganWarna>> {
         let (jumlah_kolom, jumlah_baris) = self.ukuran();
         let mut hasil = Vec::with_capacity(jumlah_baris);

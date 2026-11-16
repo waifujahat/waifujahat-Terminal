@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Window state
- * Purpose: Owns GPUI window state and application initialization.
+ * Purpose: Owns GPUI window state and application initialization
  */
 
 mod interaksi;
@@ -15,14 +15,11 @@ mod render_grid;
 use std::time::{Duration, Instant};
 
 use gpui::{Context, FocusHandle, ScrollHandle, Subscription, Task, Window};
-use waifujahat_terminal::terminal::{
-    LayarTerminal, MasukanTerminal, MotorTerminal, RiwayatPerintah, SeleksiTerminal, SesiTerminal,
-};
+use waifujahat_terminal::terminal::{LayarTerminal, MotorTerminal, SeleksiTerminal, SesiTerminal};
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
     gulir: ScrollHandle,
-    masukan: MasukanTerminal,
     layar: LayarTerminal,
     motor: MotorTerminal,
     sesi: Option<SesiTerminal>,
@@ -31,9 +28,7 @@ pub(crate) struct JendelaTerminal {
     perintah_berjalan: bool,
     menunggu_konfirmasi_perintah: bool,
     konfirmasi_perintah_aktif: bool,
-    mode_input_shell: bool,
     indeks_baris_sebelum_perintah: usize,
-    riwayat: RiwayatPerintah,
     seleksi: SeleksiTerminal,
     arah_gulir_seleksi: i8,
     kolom_gulir_seleksi: usize,
@@ -77,7 +72,6 @@ impl JendelaTerminal {
         let mut terminal = Self {
             fokus,
             gulir: ScrollHandle::new(),
-            masukan: MasukanTerminal::baru(),
             layar: LayarTerminal::baru(),
             motor: MotorTerminal::baru(80, 24),
             sesi,
@@ -86,9 +80,7 @@ impl JendelaTerminal {
             perintah_berjalan: false,
             menunggu_konfirmasi_perintah: false,
             konfirmasi_perintah_aktif: true,
-            mode_input_shell: true,
             indeks_baris_sebelum_perintah: 0,
-            riwayat: RiwayatPerintah::baru(),
             seleksi: SeleksiTerminal::baru(),
             arah_gulir_seleksi: 0,
             kolom_gulir_seleksi: 0,
