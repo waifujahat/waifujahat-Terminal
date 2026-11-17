@@ -11,6 +11,8 @@ use gpui::ScrollHandle;
 
 use waifujahat_terminal::terminal::{KeadaanSesi, SesiTerminal};
 
+use super::pencarian_terminal::PencarianPanel;
+
 pub(super) struct RuangSesi {
     pub(super) keadaan: KeadaanSesi,
     pub(super) sesi: Option<SesiTerminal>,
@@ -22,6 +24,7 @@ pub(super) struct RuangSesi {
     pub(super) mouse_tui_ditekan: Option<(usize, usize)>,
     pub(super) ukuran_pty: (u16, u16),
     pub(super) ukuran_terakhir_diminta: Option<(u16, u16)>,
+    pub(super) pencarian: PencarianPanel,
 }
 
 impl RuangSesi {
@@ -49,6 +52,7 @@ impl RuangSesi {
             mouse_tui_ditekan: None,
             ukuran_pty: (80, 24),
             ukuran_terakhir_diminta: None,
+            pencarian: PencarianPanel::default(),
         }
     }
 }

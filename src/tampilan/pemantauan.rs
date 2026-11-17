@@ -196,13 +196,18 @@ impl JendelaTerminal {
         let mut berubah = false;
 
         for (id, ruang) in self.manajer.iter_sesi_mut() {
-            if panel_terlihat.contains(&id) {
-                berubah |= ruang.sesuaikan_ukuran_panel(lebar_karakter);
-            }
+            let ukuran_berubah =
+                panel_terlihat.contains(&id) && ruang.sesuaikan_ukuran_panel(lebar_karakter);
 
             let mode_grid = ruang.mode_grid_aktif();
 
-            berubah |= ruang.periksa_keluaran(mode_grid);
+            let keluaran_berubah = ruang.periksa_keluaran(mode_grid);
+
+            if ukuran_berubah || keluaran_berubah {
+                ruang.perbarui_pencarian(false);
+
+                berubah = true;
+            }
         }
 
         if berubah {

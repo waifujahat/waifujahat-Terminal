@@ -279,6 +279,40 @@ impl MotorTerminal {
             .saturating_sub(self.offset_riwayat())
     }
 
+    pub fn tampilkan_baris(&mut self, indeks: usize) -> bool {
+        let jumlah_riwayat = self.jumlah_baris_riwayat();
+        let (_, tinggi) = self.ukuran();
+
+        if indeks >= jumlah_riwayat.saturating_add(tinggi) {
+            return false;
+        }
+
+        let awal = self.indeks_awal_tampilan();
+        let akhir = awal.saturating_add(tinggi);
+
+        let target_awal = if indeks < awal {
+            indeks
+        } else if indeks >= akhir {
+            indeks.saturating_sub(tinggi.saturating_sub(1))
+        } else {
+            return true;
+        };
+
+        let target_offset = jumlah_riwayat.saturating_sub(target_awal);
+
+        let Ok(target) = isize::try_from(target_offset) else {
+            return false;
+        };
+
+        let Ok(offset) = isize::try_from(self.offset_riwayat()) else {
+            return false;
+        };
+
+        self.geser_riwayat(target - offset);
+
+        true
+    }
+
     pub fn semua_baris(&self) -> Vec<String> {
         let grid = self.terminal.grid();
 

@@ -12,6 +12,8 @@ use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 use waifujahat_terminal::terminal::IdSesi;
 
 const WARNA_SELEKSI: u32 = 0x493663;
+const WARNA_PENCARIAN: u32 = 0x65502b;
+const WARNA_PENCARIAN_AKTIF: u32 = 0xd49b35;
 
 impl RuangSesi {
     pub(super) fn mode_grid_aktif(&self) -> bool {
@@ -94,6 +96,14 @@ impl RuangSesi {
 
             let indeks_seleksi = indeks_awal_tampilan + indeks;
 
+            let hasil_pencarian = self.pencarian.hasil.hasil_baris(indeks_seleksi);
+
+            let hasil_aktif = self
+                .pencarian
+                .hasil
+                .aktif()
+                .filter(|hasil| hasil.baris == indeks_seleksi);
+
             let rentang = self
                 .keadaan
                 .seleksi
@@ -137,6 +147,17 @@ impl RuangSesi {
                     indeks_karakter < selesai && akhir_karakter > mulai
                 });
 
+                let indeks_hasil =
+                    hasil_pencarian.partition_point(|hasil| hasil.selesai <= indeks_karakter);
+
+                let cocok = hasil_pencarian
+                    .get(indeks_hasil)
+                    .is_some_and(|hasil| hasil.mulai < akhir_karakter);
+
+                let cocok_aktif = hasil_aktif.is_some_and(|hasil| {
+                    indeks_karakter < hasil.selesai && akhir_karakter > hasil.mulai
+                });
+
                 indeks_karakter = akhir_karakter;
 
                 let lebar_sel = if sel.lebar_ganda {
@@ -153,6 +174,12 @@ impl RuangSesi {
 
                 if terpilih {
                     elemen_sel = elemen_sel.bg(rgb(WARNA_SELEKSI));
+                } else if cocok_aktif {
+                    elemen_sel = elemen_sel
+                        .bg(rgb(WARNA_PENCARIAN_AKTIF))
+                        .text_color(rgb(0x101010));
+                } else if cocok {
+                    elemen_sel = elemen_sel.bg(rgb(WARNA_PENCARIAN));
                 } else if !sel.latar_default {
                     elemen_sel = elemen_sel.bg(rgb(sel.warna_latar));
                 }

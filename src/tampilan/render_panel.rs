@@ -127,6 +127,10 @@ impl JendelaTerminal {
                         .child(self.buat_kontrol_panel(*id, konteks));
                 }
 
+                if ruang.pencarian.terbuka {
+                    panel = panel.child(self.buat_bilah_pencarian(*id, konteks));
+                }
+
                 if ruang.mode_grid_aktif() {
                     panel = panel.child(ruang.buat_keluaran_grid(*id, aktif, jendela, konteks));
                 } else {

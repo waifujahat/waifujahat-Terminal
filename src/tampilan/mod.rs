@@ -11,6 +11,7 @@ mod interaksi_mouse;
 mod manajemen_sesi;
 mod menu_split;
 mod pemantauan;
+mod pencarian_terminal;
 mod pengukuran;
 mod render;
 mod render_grid;
@@ -157,6 +158,11 @@ impl JendelaTerminal {
         }
 
         if self.tangani_tombol_sesi(kejadian, jendela, konteks) {
+            konteks.stop_propagation();
+            return;
+        }
+
+        if self.tangani_tombol_pencarian(kejadian, konteks) {
             konteks.stop_propagation();
             return;
         }

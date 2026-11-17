@@ -5228,6 +5228,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "portable-pty",
+ "regex",
  "vte",
  "winresource",
 ]
