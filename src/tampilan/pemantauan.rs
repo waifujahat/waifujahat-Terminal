@@ -14,27 +14,6 @@ use waifujahat_terminal::terminal::{PenandaShell, PesanTerminal, PosisiSeleksi, 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
 impl RuangSesi {
-    fn prompt_powershell_terlihat(&self) -> bool {
-        let Some(indeks_baris_awal) = self.keadaan.siklus.indeks_baris_awal() else {
-            return false;
-        };
-
-        let baris = self.keadaan.layar.baris();
-
-        let Some((indeks, teks)) = baris
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(_, teks)| !teks.trim().is_empty())
-        else {
-            return false;
-        };
-
-        let teks = teks.trim();
-
-        indeks > indeks_baris_awal && teks.starts_with("PS ") && teks.ends_with('>')
-    }
-
     fn selesaikan_perintah(&mut self, kode_keluar: Option<i32>) {
         if !self
             .keadaan
@@ -95,10 +74,7 @@ impl RuangSesi {
                         }
                     }
 
-                    if self.keadaan.siklus.berjalan()
-                        && !layar_alternatif_aktif
-                        && self.prompt_powershell_terlihat()
-                    {
+                    if self.keadaan.perintah_selesai_dari_prompt() {
                         self.selesaikan_perintah(None);
                     }
 

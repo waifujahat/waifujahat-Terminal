@@ -10,7 +10,7 @@ use std::thread;
 
 mod io;
 
-use super::tombol::TombolTerminal;
+use super::{profil_shell::ProfilShell, tombol::TombolTerminal};
 
 use io::{jalankan_pembaca, jalankan_penulis};
 
@@ -25,6 +25,7 @@ pub enum PesanTerminal {
 }
 
 pub struct SesiTerminal {
+    profil: ProfilShell,
     master: Box<dyn MasterPty + Send>,
     proses: Box<dyn Child + Send + Sync>,
     pengirim_masukan: Sender<Vec<u8>>,
@@ -33,6 +34,14 @@ pub struct SesiTerminal {
 
 impl SesiTerminal {
     pub fn baru() -> Result<Self> {
+        Self::baru_dengan_profil(ProfilShell::default())
+    }
+
+    pub fn baru_dengan_profil(profil: ProfilShell) -> Result<Self> {
+        let program = profil
+            .lokasi_program()
+            .ok_or_else(|| anyhow!("Shell {} tidak tersedia", profil.nama()))?;
+
         let sistem_pty = native_pty_system();
 
         let pasangan = sistem_pty
@@ -44,18 +53,31 @@ impl SesiTerminal {
             })
             .context("Gagal membuat pseudoterminal")?;
 
-        let mut perintah = CommandBuilder::new("powershell.exe");
+        let mut perintah = CommandBuilder::new(program);
 
-        perintah.arg("-NoLogo");
-        perintah.arg("-NoProfile");
-        perintah.arg("-NoExit");
-        perintah.arg("-Command");
-        perintah.arg(include_str!("integrasi_powershell.ps1"));
+        match profil {
+            ProfilShell::WindowsPowerShell | ProfilShell::PowerShell7 => {
+                perintah.arg("-NoLogo");
+                perintah.arg("-NoProfile");
+                perintah.arg("-NoExit");
+                perintah.arg("-Command");
+                perintah.arg(include_str!("integrasi_powershell.ps1"));
+            }
+
+            ProfilShell::Cmd => {
+                perintah.arg("/D");
+            }
+
+            ProfilShell::GitBash => {
+                perintah.arg("--login");
+                perintah.arg("-i");
+            }
+        }
 
         let proses = pasangan
             .slave
             .spawn_command(perintah)
-            .context("Gagal menjalankan PowerShell")?;
+            .with_context(|| format!("Gagal menjalankan {}", profil.nama()))?;
 
         drop(pasangan.slave);
 
@@ -89,6 +111,7 @@ impl SesiTerminal {
             .context("Gagal membuat thread pembaca")?;
 
         Ok(Self {
+            profil,
             master: pasangan.master,
             proses,
             pengirim_masukan,
@@ -96,6 +119,9 @@ impl SesiTerminal {
         })
     }
 
+    pub fn profil(&self) -> ProfilShell {
+        self.profil
+    }
     pub fn kirim(&self, masukan: &str) -> Result<()> {
         self.kirim_bytes(masukan.as_bytes())
     }

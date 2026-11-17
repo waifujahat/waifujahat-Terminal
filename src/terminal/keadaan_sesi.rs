@@ -17,6 +17,7 @@ pub struct KeadaanSesi {
     pub seleksi: SeleksiTerminal,
 
     integrasi_shell: ParserIntegrasiShell,
+    integrasi_shell_aktif: bool,
 }
 
 impl KeadaanSesi {
@@ -31,6 +32,7 @@ impl KeadaanSesi {
             siklus: SiklusPerintah::baru(),
             seleksi: SeleksiTerminal::baru(),
             integrasi_shell: ParserIntegrasiShell::baru(),
+            integrasi_shell_aktif: false,
         }
     }
 
@@ -38,7 +40,45 @@ impl KeadaanSesi {
         self.layar.terima(keluaran);
         self.motor.terima(keluaran);
 
-        self.integrasi_shell.terima(keluaran)
+        let penanda = self.integrasi_shell.terima(keluaran);
+
+        if !penanda.is_empty() {
+            self.integrasi_shell_aktif = true;
+        }
+
+        penanda
+    }
+
+    pub fn integrasi_shell_aktif(&self) -> bool {
+        self.integrasi_shell_aktif
+    }
+
+    pub fn perintah_selesai_dari_prompt(&self) -> bool {
+        !self.integrasi_shell_aktif()
+            && self.siklus.berjalan()
+            && !self.motor.layar_alternatif_aktif()
+            && self.prompt_powershell_terlihat()
+    }
+
+    fn prompt_powershell_terlihat(&self) -> bool {
+        let Some(indeks_baris_awal) = self.siklus.indeks_baris_awal() else {
+            return false;
+        };
+
+        let baris = self.layar.baris();
+
+        let Some((indeks, teks)) = baris
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, teks)| !teks.trim().is_empty())
+        else {
+            return false;
+        };
+
+        let teks = teks.trim();
+
+        indeks > indeks_baris_awal && teks.starts_with("PS ") && teks.ends_with('>')
     }
 
     pub fn ubah_ukuran(&mut self, kolom: usize, baris: usize) {

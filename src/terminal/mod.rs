@@ -5,6 +5,7 @@
  * Purpose: Exposes reusable terminal components
  */
 
+mod distribusi_wsl;
 mod integrasi_shell;
 mod keadaan_sesi;
 mod layar;
@@ -15,6 +16,7 @@ mod motor;
 mod mouse;
 mod pencarian;
 mod perintah;
+mod profil_shell;
 mod riwayat;
 mod seleksi;
 mod sesi;
@@ -24,6 +26,7 @@ mod tempel;
 mod tombol;
 mod warna;
 
+pub use distribusi_wsl::{deteksi_distribusi_wsl, urai_distribusi_wsl};
 pub use integrasi_shell::{ParserIntegrasiShell, PenandaShell};
 pub use keadaan_sesi::KeadaanSesi;
 pub use layar::LayarTerminal;
@@ -34,6 +37,7 @@ pub use motor::MotorTerminal;
 pub use mouse::{AksiMouse, PengubahMouse, TombolMouse, sandi_mouse_sgr};
 pub use pencarian::{CakupanPencarian, HasilPencarian, OpsiPencarian, PencarianTerminal};
 pub use perintah::{AksiPengajuan, SiklusPerintah, StatusPerintah};
+pub use profil_shell::ProfilShell;
 pub use riwayat::RiwayatPerintah;
 pub use seleksi::{PosisiSeleksi, SeleksiTerminal};
 pub use sesi::{PesanTerminal, SesiTerminal};

@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / PowerShell integration
- * Purpose: Reports command completion through OSC 133
+ * Purpose: Reports prompt boundaries and command completion through OSC 133
 #>
 
 $global:WaifujahatRiwayatTerakhir = -1
@@ -72,6 +72,10 @@ function global:prompt {
 
     $global:WaifujahatRiwayatTerakhir = $indeks
     $global:WaifujahatKesalahanTerakhir = $kesalahanTerbaru
+
+    [Console]::Write(
+        ('{0}]133;A{1}' -f $escape, $bell)
+    )
 
     & $global:WaifujahatPromptAsli
 }
