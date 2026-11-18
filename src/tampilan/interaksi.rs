@@ -12,9 +12,40 @@ use gpui::{
     Pixels, Point, TextRun, Window, px, white,
 };
 
-use waifujahat_terminal::terminal::{AksiPengajuan, PosisiSeleksi, TombolTerminal, sandi_tempel};
+use waifujahat_terminal::terminal::{
+    AksiPengajuan, PengubahTombol, PosisiSeleksi, TombolKhusus, TombolTerminal, sandi_tempel,
+};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
+
+pub(super) fn petakan_tombol_khusus(nama: &str) -> Option<TombolKhusus> {
+    let tombol = match nama {
+        "up" | "arrowup" => TombolKhusus::Atas,
+        "down" | "arrowdown" => TombolKhusus::Bawah,
+        "left" | "arrowleft" => TombolKhusus::Kiri,
+        "right" | "arrowright" => TombolKhusus::Kanan,
+        "home" => TombolKhusus::Awal,
+        "end" => TombolKhusus::Akhir,
+        "insert" => TombolKhusus::Sisipkan,
+        "delete" => TombolKhusus::HapusSesudah,
+
+        "pageup" | "page-up" | "page_up" => TombolKhusus::HalamanAtas,
+
+        "pagedown" | "page-down" | "page_down" => TombolKhusus::HalamanBawah,
+
+        _ => {
+            let nomor = nama.strip_prefix('f')?.parse::<u8>().ok()?;
+
+            if !(1..=12).contains(&nomor) {
+                return None;
+            }
+
+            TombolKhusus::Fungsi(nomor)
+        }
+    };
+
+    Some(tombol)
+}
 
 impl RuangSesi {
     fn posisi_dari_mouse(
@@ -271,7 +302,11 @@ impl RuangSesi {
             .rposition(|baris| !baris.trim().is_empty())
             .unwrap_or(0);
 
-        if let Err(kesalahan) = sesi.kirim_tombol(TombolTerminal::Enter) {
+        let Some(bytes) = self.keadaan.motor.sandi_tombol(TombolTerminal::Enter) else {
+            return;
+        };
+
+        if let Err(kesalahan) = sesi.kirim_bytes(&bytes) {
             self.status = format!("Gagal mengirim Enter: {kesalahan}");
             return;
         }
@@ -288,7 +323,9 @@ impl RuangSesi {
             return;
         };
 
-        if let Err(kesalahan) = sesi.kirim_tombol(tombol) {
+        if let Some(bytes) = self.keadaan.motor.sandi_tombol(tombol)
+            && let Err(kesalahan) = sesi.kirim_bytes(&bytes)
+        {
             self.status = format!("Gagal mengirim input: {kesalahan}");
         }
     }
@@ -347,7 +384,7 @@ impl RuangSesi {
         }
 
         let data: Vec<u8> = std::iter::repeat_n(tombol, jumlah)
-            .filter_map(TombolTerminal::ke_bytes)
+            .filter_map(|tombol| self.keadaan.motor.sandi_tombol(tombol))
             .flatten()
             .collect();
 
@@ -419,7 +456,7 @@ impl RuangSesi {
             .chain(std::iter::repeat_n(TombolTerminal::Kanan, mulai))
             .chain(std::iter::repeat_n(TombolTerminal::PilihKanan, panjang))
             .chain(std::iter::once(tombol))
-            .filter_map(TombolTerminal::ke_bytes)
+            .filter_map(|tombol| self.keadaan.motor.sandi_tombol(tombol))
             .flatten()
             .collect();
 
@@ -545,6 +582,60 @@ impl RuangSesi {
             }
         }
 
+        if self.keadaan.motor.kitty_aktif() {
+            if kejadian.prefer_character_input
+                && let Some(teks) = tombol.key_char.as_deref()
+                && !teks.chars().any(char::is_control)
+            {
+                self.kirim_input_langsung(TombolTerminal::Teks(teks));
+                konteks.notify();
+                return;
+            }
+
+            let shortcut_internal = tombol.modifiers.control
+                && !tombol.modifiers.alt
+                && (nama_tombol == "v"
+                    || (nama_tombol == "c" && self.keadaan.seleksi.rentang().is_some())
+                    || (shell_siap && matches!(nama_tombol.as_str(), "m" | "j")));
+
+            if !shortcut_internal && self.kirim_tombol_kitty(kejadian) {
+                self.gulir.scroll_to_bottom();
+                konteks.notify();
+                return;
+            }
+        }
+
+        if !tombol.modifiers.platform
+            && let Some(tombol_khusus) = petakan_tombol_khusus(&nama_tombol)
+        {
+            if tombol_khusus == TombolKhusus::HapusSesudah
+                && !tombol.modifiers.control
+                && !tombol.modifiers.alt
+                && self.hapus_seleksi_input(TombolTerminal::HapusSesudah)
+            {
+                konteks.notify();
+                return;
+            }
+
+            if self.mode_grid_aktif() && self.keadaan.motor.offset_riwayat() > 0 {
+                self.keadaan.motor.kembali_ke_bawah();
+                self.keadaan.seleksi.bersihkan();
+            }
+
+            let pengubah = PengubahTombol {
+                shift: tombol.modifiers.shift,
+                alt: tombol.modifiers.alt,
+                kontrol: tombol.modifiers.control,
+            };
+
+            self.kirim_input_langsung(TombolTerminal::Khusus(tombol_khusus, pengubah));
+
+            self.gulir.scroll_to_bottom();
+            konteks.notify();
+
+            return;
+        }
+
         if tombol.modifiers.control || tombol.modifiers.platform {
             match nama_tombol.as_str() {
                 "c" => {
@@ -595,15 +686,7 @@ impl RuangSesi {
             return;
         }
 
-        let tombol_hapus = match nama_tombol.as_str() {
-            "backspace" => Some(TombolTerminal::HapusSebelum),
-            "delete" => Some(TombolTerminal::HapusSesudah),
-            _ => None,
-        };
-
-        if let Some(tombol_hapus) = tombol_hapus
-            && self.hapus_seleksi_input(tombol_hapus)
-        {
+        if nama_tombol == "backspace" && self.hapus_seleksi_input(TombolTerminal::HapusSebelum) {
             konteks.notify();
             return;
         }

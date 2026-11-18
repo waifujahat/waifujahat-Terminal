@@ -89,6 +89,8 @@ impl JendelaTerminal {
         }
 
         if let Some(ruang) = self.manajer.tutup_panel(id) {
+            self.kepemilikan_tombol.batalkan_pemilik(id);
+
             drop(ruang);
 
             jendela.focus(&self.fokus, konteks);
@@ -152,7 +154,9 @@ impl JendelaTerminal {
             return;
         };
 
-        let sesi_sibuk = susunan.daftar_id().into_iter().any(|id_sesi| {
+        let daftar_id = susunan.daftar_id();
+
+        let sesi_sibuk = daftar_id.iter().copied().any(|id_sesi| {
             self.manajer.ambil(id_sesi).is_some_and(|ruang| {
                 ruang.keadaan.siklus.berjalan() || ruang.keadaan.motor.layar_alternatif_aktif()
             })
@@ -166,6 +170,10 @@ impl JendelaTerminal {
         }
 
         drop(self.manajer.tutup_tab(id));
+
+        for id_sesi in daftar_id {
+            self.kepemilikan_tombol.batalkan_pemilik(id_sesi);
+        }
 
         jendela.focus(&self.fokus, konteks);
         konteks.notify();

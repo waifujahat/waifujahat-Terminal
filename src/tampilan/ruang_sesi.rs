@@ -13,6 +13,10 @@ use waifujahat_terminal::terminal::{KeadaanSesi, SesiTerminal};
 
 use super::pencarian_terminal::PencarianPanel;
 
+use std::collections::HashMap;
+
+use super::keyboard_kitty::TombolKittyDitekan;
+
 pub(super) struct RuangSesi {
     pub(super) keadaan: KeadaanSesi,
     pub(super) sesi: Option<SesiTerminal>,
@@ -25,6 +29,7 @@ pub(super) struct RuangSesi {
     pub(super) ukuran_pty: (u16, u16),
     pub(super) ukuran_terakhir_diminta: Option<(u16, u16)>,
     pub(super) pencarian: PencarianPanel,
+    pub(super) tombol_kitty_ditekan: HashMap<String, TombolKittyDitekan>,
 }
 
 impl RuangSesi {
@@ -53,6 +58,7 @@ impl RuangSesi {
             ukuran_pty: (80, 24),
             ukuran_terakhir_diminta: None,
             pencarian: PencarianPanel::default(),
+            tombol_kitty_ditekan: HashMap::new(),
         }
     }
 }

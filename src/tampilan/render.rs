@@ -153,6 +153,7 @@ impl Render for JendelaTerminal {
             .overflow_hidden()
             .track_focus(&self.fokus)
             .on_key_down(konteks.listener(Self::proses_tombol))
+            .on_key_up(konteks.listener(Self::proses_tombol_lepas))
             .on_mouse_down(
                 MouseButton::Left,
                 konteks.listener(|terminal, _, jendela, konteks| {

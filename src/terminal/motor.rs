@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / Alacritty engine
- * Purpose: Provides ANSI parsing, grid access, and render-ready cell segments.
+ * Purpose: Provides ANSI parsing, grid access and render-ready cell segments
  */
 
 use super::warna::{PotonganWarna, warna_rgb};
@@ -24,6 +24,16 @@ use alacritty_terminal::{
     vte::ansi::Processor,
 };
 
+use super::tombol::{PengubahTombol, TombolTerminal};
+
+use super::keyboard_kitty::{JenisAksiTombol, sandi_kitty_tombol, sandi_kitty_unicode};
+
+use super::negosiasi_kitty::NegosiasiKitty;
+
+use super::PerintahModeKitty;
+
+use std::time::Instant;
+
 struct PengirimRespons {
     pengirim: Sender<Vec<u8>>,
 }
@@ -39,29 +49,256 @@ impl EventListener for PengirimRespons {
 pub struct MotorTerminal {
     terminal: Term<PengirimRespons>,
     parser: Processor,
+    pengirim_respons: Sender<Vec<u8>>,
     penerima_respons: Receiver<Vec<u8>>,
+    negosiasi_kitty: Option<NegosiasiKitty>,
+    generasi_kitty: u64,
 }
 
 impl MotorTerminal {
     pub fn baru(kolom: usize, baris: usize) -> Self {
+        Self::buat(kolom, baris, false)
+    }
+
+    pub fn baru_dengan_kitty(kolom: usize, baris: usize) -> Self {
+        Self::buat(kolom, baris, true)
+    }
+
+    fn buat(kolom: usize, baris: usize, kitty: bool) -> Self {
         let ukuran = TermSize::new(kolom.max(2), baris.max(1));
+
         let (pengirim_respons, penerima_respons) = mpsc::channel();
+
+        let konfigurasi = Config {
+            kitty_keyboard: false,
+            ..Config::default()
+        };
 
         Self {
             terminal: Term::new(
-                Config::default(),
+                konfigurasi,
                 &ukuran,
                 PengirimRespons {
-                    pengirim: pengirim_respons,
+                    pengirim: pengirim_respons.clone(),
                 },
             ),
             parser: Processor::new(),
+            pengirim_respons,
             penerima_respons,
+            negosiasi_kitty: kitty.then(NegosiasiKitty::baru),
+            generasi_kitty: 0,
         }
     }
 
+    pub fn generasi_kitty(&self) -> u64 {
+        self.generasi_kitty
+    }
+
+    pub fn kursor_aplikasi_aktif(&self) -> bool {
+        self.terminal.mode().contains(TermMode::APP_CURSOR)
+    }
+
+    pub fn sandi_tombol(&self, tombol: TombolTerminal<'_>) -> Option<Vec<u8>> {
+        self.sandi_tombol_dengan_aksi(tombol, JenisAksiTombol::Tekan)
+    }
+
+    pub fn sandi_tombol_dengan_aksi(
+        &self,
+        tombol: TombolTerminal<'_>,
+        aksi: JenisAksiTombol,
+    ) -> Option<Vec<u8>> {
+        let disambiguasi = self.kitty_disambiguasi_aktif();
+        let laporkan_aksi = self.kitty_pelaporan_aksi_aktif();
+
+        if disambiguasi || (laporkan_aksi && aksi != JenisAksiTombol::Tekan) {
+            return sandi_kitty_tombol(tombol, aksi, laporkan_aksi);
+        }
+
+        if aksi == JenisAksiTombol::Lepas {
+            return None;
+        }
+
+        let hasil = tombol.ke_bytes_dengan_kursor_aplikasi(self.kursor_aplikasi_aktif());
+
+        if laporkan_aksi && hasil.is_none() {
+            return sandi_kitty_tombol(tombol, aksi, laporkan_aksi);
+        }
+
+        hasil
+    }
+
+    pub fn sandi_unicode_kitty(
+        &self,
+        karakter: char,
+        pengubah: PengubahTombol,
+        aksi: JenisAksiTombol,
+    ) -> Option<Vec<u8>> {
+        if !self.kitty_aktif() {
+            return None;
+        }
+
+        let laporkan = self.kitty_pelaporan_aksi_aktif();
+
+        if self.kitty_disambiguasi_aktif() || aksi != JenisAksiTombol::Tekan {
+            return sandi_kitty_unicode(karakter, pengubah, aksi, laporkan);
+        }
+
+        let kode = match karakter.to_ascii_lowercase() {
+            '\x1b' => Some(0x1b),
+
+            huruf @ 'a'..='z' if pengubah.kontrol => Some(huruf.to_ascii_uppercase() as u8 - b'@'),
+
+            ' ' | '@' if pengubah.kontrol => Some(0),
+
+            simbol @ '['..='_' if pengubah.kontrol => Some(simbol as u8 - b'@'),
+
+            '?' if pengubah.kontrol => Some(0x7f),
+
+            _ if pengubah.alt
+                && !pengubah.kontrol
+                && (karakter.is_ascii_graphic() || karakter == ' ') =>
+            {
+                let karakter = if pengubah.shift {
+                    match karakter {
+                        '`' => '~',
+                        '1' => '!',
+                        '2' => '@',
+                        '3' => '#',
+                        '4' => '$',
+                        '5' => '%',
+                        '6' => '^',
+                        '7' => '&',
+                        '8' => '*',
+                        '9' => '(',
+                        '0' => ')',
+                        '-' => '_',
+                        '=' => '+',
+                        '[' => '{',
+                        ']' => '}',
+                        '\\' => '|',
+                        ';' => ':',
+                        '\'' => '"',
+                        ',' => '<',
+                        '.' => '>',
+                        '/' => '?',
+                        lainnya => lainnya.to_ascii_uppercase(),
+                    }
+                } else {
+                    karakter
+                };
+
+                Some(karakter as u8)
+            }
+
+            _ => None,
+        };
+
+        if let Some(kode) = kode {
+            let mut hasil = Vec::new();
+
+            if pengubah.alt {
+                hasil.push(0x1b);
+            }
+
+            hasil.push(kode);
+
+            return Some(hasil);
+        }
+
+        sandi_kitty_unicode(karakter, pengubah, aksi, laporkan)
+    }
+
+    pub fn kitty_disambiguasi_aktif(&self) -> bool {
+        self.negosiasi_kitty.as_ref().is_some_and(|negosiasi| {
+            negosiasi
+                .mode(self.layar_alternatif_aktif())
+                .disambiguasi_aktif()
+        })
+    }
+
+    pub fn kitty_pelaporan_aksi_aktif(&self) -> bool {
+        self.negosiasi_kitty.as_ref().is_some_and(|negosiasi| {
+            negosiasi
+                .mode(self.layar_alternatif_aktif())
+                .pelaporan_aksi_aktif()
+        })
+    }
+
+    pub fn kitty_aktif(&self) -> bool {
+        self.kitty_disambiguasi_aktif() || self.kitty_pelaporan_aksi_aktif()
+    }
+
     pub fn terima(&mut self, keluaran: &[u8]) {
-        self.parser.advance(&mut self.terminal, keluaran);
+        self.periksa_timeout_sinkronisasi(Instant::now());
+
+        let Some(negosiasi) = self.negosiasi_kitty.as_mut() else {
+            self.parser.advance(&mut self.terminal, keluaran);
+            return;
+        };
+
+        let mut sisa = keluaran;
+
+        while !sisa.is_empty() {
+            let (jumlah, perintah) = negosiasi.terima(sisa);
+
+            let alternatif_sebelum = self.terminal.mode().contains(TermMode::ALT_SCREEN);
+
+            self.parser.advance(&mut self.terminal, &sisa[..jumlah]);
+
+            sisa = &sisa[jumlah..];
+
+            if alternatif_sebelum != self.terminal.mode().contains(TermMode::ALT_SCREEN) {
+                self.generasi_kitty = self.generasi_kitty.wrapping_add(1);
+            }
+
+            if let Some(perintah) = perintah {
+                if perintah == PerintahModeKitty::PeralihanLayar {
+                    continue;
+                }
+
+                if perintah != PerintahModeKitty::Tanya {
+                    self.generasi_kitty = self.generasi_kitty.wrapping_add(1);
+                }
+
+                if self.parser.sync_bytes_count() > 0 {
+                    let alternatif_sebelum = self.terminal.mode().contains(TermMode::ALT_SCREEN);
+
+                    self.parser.stop_sync(&mut self.terminal);
+
+                    if alternatif_sebelum != self.terminal.mode().contains(TermMode::ALT_SCREEN) {
+                        self.generasi_kitty = self.generasi_kitty.wrapping_add(1);
+                    }
+                }
+
+                let alternatif = self.terminal.mode().contains(TermMode::ALT_SCREEN);
+
+                if let Some(respons) = negosiasi.proses(perintah, alternatif) {
+                    let _ = self.pengirim_respons.send(respons);
+                }
+            }
+        }
+    }
+
+    pub fn periksa_timeout_sinkronisasi(&mut self, sekarang: Instant) -> bool {
+        let kedaluwarsa = self
+            .parser
+            .sync_timeout()
+            .sync_timeout()
+            .is_some_and(|batas| sekarang >= batas);
+
+        if !kedaluwarsa {
+            return false;
+        }
+
+        let alternatif_sebelum = self.layar_alternatif_aktif();
+
+        self.parser.stop_sync(&mut self.terminal);
+
+        if self.negosiasi_kitty.is_some() && alternatif_sebelum != self.layar_alternatif_aktif() {
+            self.generasi_kitty = self.generasi_kitty.wrapping_add(1);
+        }
+
+        true
     }
 
     pub fn ambil_respons(&self) -> Option<Vec<u8>> {

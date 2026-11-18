@@ -49,8 +49,37 @@ impl RuangSesi {
         };
     }
 
+    fn kirim_respons_terminal(&mut self) {
+        while let Some(respons) = self.keadaan.motor.ambil_respons() {
+            if let Some(sesi) = &self.sesi
+                && let Err(kesalahan) = sesi.kirim_bytes(&respons)
+            {
+                self.status = format!("Gagal membalas permintaan terminal: {kesalahan}");
+
+                break;
+            }
+        }
+    }
+
     pub(super) fn periksa_keluaran(&mut self, mode_grid: bool) -> bool {
         let mut berubah = false;
+
+        let layar_alternatif_sebelum = self.keadaan.motor.layar_alternatif_aktif();
+
+        if self
+            .keadaan
+            .motor
+            .periksa_timeout_sinkronisasi(Instant::now())
+        {
+            if layar_alternatif_sebelum != self.keadaan.motor.layar_alternatif_aktif() {
+                self.keadaan.seleksi.bersihkan();
+                self.arah_gulir_seleksi = 0;
+            }
+
+            self.kirim_respons_terminal();
+
+            berubah = true;
+        }
 
         for _ in 0..64 {
             let pesan = self.sesi.as_ref().and_then(SesiTerminal::try_ambil);
@@ -78,16 +107,7 @@ impl RuangSesi {
                         self.selesaikan_perintah(None);
                     }
 
-                    while let Some(respons) = self.keadaan.motor.ambil_respons() {
-                        if let Some(sesi) = &self.sesi
-                            && let Err(kesalahan) = sesi.kirim_bytes(&respons)
-                        {
-                            self.status =
-                                format!("Gagal membalas permintaan terminal: {kesalahan}");
-
-                            break;
-                        }
-                    }
+                    self.kirim_respons_terminal();
 
                     berubah = true;
                 }
@@ -177,7 +197,18 @@ impl JendelaTerminal {
 
             let mode_grid = ruang.mode_grid_aktif();
 
+            let generasi_sebelum = ruang.keadaan.motor.generasi_kitty();
+
             let keluaran_berubah = ruang.periksa_keluaran(mode_grid);
+
+            let generasi_berubah = generasi_sebelum != ruang.keadaan.motor.generasi_kitty();
+
+            if (generasi_berubah || ruang.sesi.is_none()) && !ruang.tombol_kitty_ditekan.is_empty()
+            {
+                ruang.tombol_kitty_ditekan.clear();
+
+                self.kepemilikan_tombol.batalkan_pemilik(id);
+            }
 
             if ukuran_berubah || keluaran_berubah {
                 ruang.perbarui_pencarian(false);

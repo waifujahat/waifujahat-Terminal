@@ -28,7 +28,7 @@ impl KeadaanSesi {
 
         Self {
             layar,
-            motor: MotorTerminal::baru(kolom, baris),
+            motor: MotorTerminal::baru_dengan_kitty(kolom, baris),
             siklus: SiklusPerintah::baru(),
             seleksi: SeleksiTerminal::baru(),
             integrasi_shell: ParserIntegrasiShell::baru(),
