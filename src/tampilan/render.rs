@@ -142,10 +142,7 @@ impl RuangSesi {
 
 impl Render for JendelaTerminal {
     fn render(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
-        let gambar_latar = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("assets")
-            .join("images")
-            .join("demo.jpg");
+        let gambar_latar = konteks.global::<crate::aset::LatarAplikasi>().gambar();
 
         let halaman = div()
             .id("jendela-terminal")

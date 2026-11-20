@@ -17,8 +17,13 @@ fn main() {
     gpui_platform::application()
         .with_assets(aset::AsetAplikasi)
         .run(|aplikasi: &mut App| {
+            aset::LatarAplikasi::muat(aplikasi).expect("Gagal memuat gambar latar");
+
             let pengaturan_jendela = WindowOptions {
-                window_bounds: Some(WindowBounds::centered(size(px(720.0), px(260.0)), aplikasi)),
+                window_bounds: Some(WindowBounds::centered(
+                    size(px(1120.0), px(630.0)),
+                    aplikasi,
+                )),
                 titlebar: Some(TitlebarOptions {
                     title: Some("Waifujahat Terminal".into()),
                     ..Default::default()

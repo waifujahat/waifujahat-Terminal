@@ -7,17 +7,14 @@
 
 use gpui::{
     AnyElement, Context, CursorStyle, MouseButton, MouseDownEvent, MouseMoveEvent, ScrollHandle,
-    div, prelude::*, px, rgb,
+    div, prelude::*, px,
 };
 
 use waifujahat_terminal::terminal::{ArahPanel, CabangPanel, IdTab, SusunanPanel};
 
 use super::JendelaTerminal;
 
-use crate::tema::WARNA_AKSEN;
-
 const UKURAN_DIVIDER: f32 = 6.0;
-const WARNA_DIVIDER: u32 = 0x303649;
 
 pub(super) struct TarikanPanel {
     tab: IdTab,
@@ -43,12 +40,7 @@ impl JendelaTerminal {
             .expect("Tab aktif tidak tersedia");
         let jalur = jalur.to_vec();
 
-        let pemisah = div()
-            .id(format!("divider-panel-{jalur:?}"))
-            .flex_shrink_0()
-            .rounded_sm()
-            .bg(rgb(WARNA_DIVIDER))
-            .hover(|gaya| gaya.bg(rgb(WARNA_AKSEN)));
+        let pemisah = div().id(format!("divider-panel-{jalur:?}")).flex_shrink_0();
 
         let pemisah = match arah {
             ArahPanel::Horizontal => pemisah
