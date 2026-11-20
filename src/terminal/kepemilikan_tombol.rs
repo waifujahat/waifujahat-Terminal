@@ -35,6 +35,18 @@ impl<Id: Copy + Eq> KepemilikanTombol<Id> {
         self.tombol.get(&nama.to_ascii_lowercase()).copied()
     }
 
+    pub fn cari_awalan_unik(&self, awalan: &str) -> Option<String> {
+        let mut ditemukan = self.tombol.keys().filter(|nama| nama.starts_with(awalan));
+
+        let nama = ditemukan.next()?;
+
+        if ditemukan.next().is_some() {
+            return None;
+        }
+
+        Some(nama.clone())
+    }
+
     pub fn lepas(&mut self, nama: &str) -> Option<StatusKepemilikanTombol<Id>> {
         self.tombol.remove(&nama.to_ascii_lowercase())
     }

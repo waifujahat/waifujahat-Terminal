@@ -88,7 +88,9 @@ impl JendelaTerminal {
             return;
         }
 
-        if let Some(ruang) = self.manajer.tutup_panel(id) {
+        if let Some(mut ruang) = self.manajer.tutup_panel(id) {
+            ruang.lepas_semua_tombol_win32();
+
             self.kepemilikan_tombol.batalkan_pemilik(id);
 
             drop(ruang);
@@ -167,6 +169,12 @@ impl JendelaTerminal {
 
             konteks.notify();
             return;
+        }
+
+        for id_sesi in daftar_id.iter().copied() {
+            if let Some(ruang) = self.manajer.ambil_mut(id_sesi) {
+                ruang.lepas_semua_tombol_win32();
+            }
         }
 
         drop(self.manajer.tutup_tab(id));

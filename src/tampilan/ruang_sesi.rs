@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use gpui::ScrollHandle;
 
-use waifujahat_terminal::terminal::{KeadaanSesi, SesiTerminal};
+use waifujahat_terminal::terminal::{KeadaanSesi, RekamanTombolWin32, SesiTerminal};
 
 use super::pencarian_terminal::PencarianPanel;
 
@@ -30,6 +30,7 @@ pub(super) struct RuangSesi {
     pub(super) ukuran_terakhir_diminta: Option<(u16, u16)>,
     pub(super) pencarian: PencarianPanel,
     pub(super) tombol_kitty_ditekan: HashMap<String, TombolKittyDitekan>,
+    pub(super) tombol_win32_ditekan: HashMap<String, RekamanTombolWin32>,
 }
 
 impl RuangSesi {
@@ -59,6 +60,7 @@ impl RuangSesi {
             ukuran_terakhir_diminta: None,
             pencarian: PencarianPanel::default(),
             tombol_kitty_ditekan: HashMap::new(),
+            tombol_win32_ditekan: HashMap::new(),
         }
     }
 }

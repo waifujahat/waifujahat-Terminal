@@ -197,16 +197,39 @@ impl JendelaTerminal {
 
             let mode_grid = ruang.mode_grid_aktif();
 
-            let generasi_sebelum = ruang.keadaan.motor.generasi_kitty();
+            let generasi_kitty_sebelum = ruang.keadaan.motor.generasi_kitty();
+
+            let generasi_win32_sebelum = ruang.keadaan.motor.generasi_win32();
+
+            let protokol_sebelum = ruang.keadaan.motor.protokol_keyboard();
 
             let keluaran_berubah = ruang.periksa_keluaran(mode_grid);
 
-            let generasi_berubah = generasi_sebelum != ruang.keadaan.motor.generasi_kitty();
+            let protokol_berubah = protokol_sebelum != ruang.keadaan.motor.protokol_keyboard();
 
-            if (generasi_berubah || ruang.sesi.is_none()) && !ruang.tombol_kitty_ditekan.is_empty()
-            {
+            let kitty_dibatalkan = ruang.sesi.is_none()
+                || protokol_berubah
+                || generasi_kitty_sebelum != ruang.keadaan.motor.generasi_kitty();
+
+            let win32_dibatalkan = ruang.sesi.is_none()
+                || protokol_berubah
+                || generasi_win32_sebelum != ruang.keadaan.motor.generasi_win32();
+
+            let mut batalkan_pemilik = false;
+
+            if kitty_dibatalkan && !ruang.tombol_kitty_ditekan.is_empty() {
                 ruang.tombol_kitty_ditekan.clear();
 
+                batalkan_pemilik = true;
+            }
+
+            if win32_dibatalkan && !ruang.tombol_win32_ditekan.is_empty() {
+                ruang.tombol_win32_ditekan.clear();
+
+                batalkan_pemilik = true;
+            }
+
+            if batalkan_pemilik {
                 self.kepemilikan_tombol.batalkan_pemilik(id);
             }
 

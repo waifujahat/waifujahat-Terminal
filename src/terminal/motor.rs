@@ -34,6 +34,12 @@ use super::PerintahModeKitty;
 
 use std::time::Instant;
 
+use super::keyboard_win32::RekamanTombolWin32;
+
+use super::mode_win32::ModeInputWin32;
+
+use super::protokol_keyboard::ProtokolKeyboard;
+
 struct PengirimRespons {
     pengirim: Sender<Vec<u8>>,
 }
@@ -53,6 +59,7 @@ pub struct MotorTerminal {
     penerima_respons: Receiver<Vec<u8>>,
     negosiasi_kitty: Option<NegosiasiKitty>,
     generasi_kitty: u64,
+    mode_win32: ModeInputWin32,
 }
 
 impl MotorTerminal {
@@ -87,11 +94,38 @@ impl MotorTerminal {
             penerima_respons,
             negosiasi_kitty: kitty.then(NegosiasiKitty::baru),
             generasi_kitty: 0,
+            mode_win32: ModeInputWin32::baru(),
         }
     }
 
     pub fn generasi_kitty(&self) -> u64 {
         self.generasi_kitty
+    }
+
+    pub fn generasi_win32(&self) -> u64 {
+        self.mode_win32.generasi()
+    }
+
+    pub fn win32_aktif(&self) -> bool {
+        self.mode_win32.aktif()
+    }
+
+    pub fn protokol_keyboard(&self) -> ProtokolKeyboard {
+        if self.kitty_aktif() {
+            ProtokolKeyboard::Kitty
+        } else if self.win32_aktif() {
+            ProtokolKeyboard::Win32
+        } else {
+            ProtokolKeyboard::Xterm
+        }
+    }
+
+    pub fn sandi_rekaman_win32(&self, rekaman: RekamanTombolWin32) -> Option<Vec<u8>> {
+        if self.protokol_keyboard() != ProtokolKeyboard::Win32 {
+            return None;
+        }
+
+        Some(rekaman.sandi())
     }
 
     pub fn kursor_aplikasi_aktif(&self) -> bool {
@@ -230,6 +264,8 @@ impl MotorTerminal {
 
     pub fn terima(&mut self, keluaran: &[u8]) {
         self.periksa_timeout_sinkronisasi(Instant::now());
+
+        self.mode_win32.terima(keluaran);
 
         let Some(negosiasi) = self.negosiasi_kitty.as_mut() else {
             self.parser.advance(&mut self.terminal, keluaran);

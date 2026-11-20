@@ -6,9 +6,12 @@
  */
 
 mod divider_panel;
+mod input_win32;
 mod interaksi;
 mod interaksi_mouse;
 mod keyboard_kitty;
+#[cfg(windows)]
+mod keyboard_win32;
 mod manajemen_sesi;
 mod menu_split;
 mod pemantauan;
@@ -28,11 +31,16 @@ use gpui::{
 };
 
 use waifujahat_terminal::terminal::{
-    IdSesi, KepemilikanTombol, ManajerTab, StatusKepemilikanTombol,
+    IdSesi, KepemilikanTombol, ManajerTab, RekamanTombolWin32, StatusKepemilikanTombol,
 };
 
 use divider_panel::TarikanPanel;
 use ruang_sesi::RuangSesi;
+
+use input_win32::identitas_tombol_win32;
+
+#[cfg(windows)]
+use keyboard_win32::{PengamatKeyboardWin32, kode_virtual_keyboard};
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
@@ -44,6 +52,8 @@ pub(crate) struct JendelaTerminal {
     _tugas_pantau: Task<()>,
     menu_split: Option<gpui::Pixels>,
     tarikan_panel: Option<TarikanPanel>,
+    #[cfg(windows)]
+    pengamat_keyboard_win32: Option<PengamatKeyboardWin32>,
 }
 
 impl JendelaTerminal {
@@ -56,6 +66,21 @@ impl JendelaTerminal {
 
         manajer.tambah_tab(RuangSesi::baru());
 
+        #[cfg(windows)]
+        let pengamat_keyboard_win32 = match PengamatKeyboardWin32::pasang(jendela) {
+            Ok(pengamat) => Some(pengamat),
+
+            Err(kesalahan) => {
+                if let Some(ruang) = manajer.aktif_mut()
+                    && ruang.status.is_empty()
+                {
+                    ruang.status = format!("Pengamat keyboard Win32 tidak tersedia: {kesalahan}");
+                }
+
+                None
+            }
+        };
+
         let pengamat_ukuran =
             konteks.observe_window_bounds(jendela, |terminal, jendela, konteks| {
                 terminal.sesuaikan_ukuran(jendela, konteks);
@@ -64,7 +89,7 @@ impl JendelaTerminal {
         let pengamat_aktivasi =
             konteks.observe_window_activation(jendela, |terminal, jendela, konteks| {
                 if !jendela.is_window_active() {
-                    terminal.batalkan_tombol_kitty();
+                    terminal.batalkan_semua_tombol();
                     konteks.notify();
                 }
             });
@@ -95,6 +120,8 @@ impl JendelaTerminal {
             _tugas_pantau: tugas_pantau,
             menu_split: None,
             tarikan_panel: None,
+            #[cfg(windows)]
+            pengamat_keyboard_win32,
         };
 
         terminal.sesuaikan_ukuran(jendela, konteks);
@@ -110,9 +137,69 @@ impl JendelaTerminal {
         self.manajer.aktif_mut().expect("Sesi aktif tidak tersedia")
     }
 
-    fn batalkan_tombol_kitty(&mut self) {
+    fn kode_virtual_win32(nama: &str) -> Option<u16> {
+        #[cfg(windows)]
+        {
+            kode_virtual_keyboard(nama)
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = nama;
+
+            None
+        }
+    }
+
+    fn ambil_rekaman_win32(
+        &self,
+        kode: Option<u16>,
+        ditekan: bool,
+        diulang: Option<bool>,
+    ) -> Option<RekamanTombolWin32> {
+        #[cfg(windows)]
+        {
+            self.pengamat_keyboard_win32
+                .as_ref()?
+                .ambil(kode?, ditekan, diulang)
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = (kode, ditekan, diulang);
+
+            None
+        }
+    }
+
+    fn identitas_kepemilikan(
+        &self,
+        nama: &str,
+        kode: Option<u16>,
+        rekaman: Option<RekamanTombolWin32>,
+    ) -> String {
+        let identitas = match rekaman {
+            Some(rekaman) => Some(identitas_tombol_win32(rekaman)),
+
+            None => kode.and_then(|kode| {
+                self.kepemilikan_tombol
+                    .cari_awalan_unik(&format!("win32:{kode}:"))
+            }),
+        };
+
+        if let Some(identitas) = identitas
+            && self.kepemilikan_tombol.ambil(&identitas).is_some()
+        {
+            return identitas;
+        }
+
+        nama.to_owned()
+    }
+
+    fn batalkan_semua_tombol(&mut self) {
         for (_, ruang) in self.manajer.iter_sesi_mut() {
             ruang.lepas_semua_tombol_kitty();
+            ruang.lepas_semua_tombol_win32();
         }
 
         self.kepemilikan_tombol.batalkan_semua();
@@ -126,12 +213,20 @@ impl JendelaTerminal {
     ) {
         let nama = kejadian.keystroke.key.to_ascii_lowercase();
 
-        let Some(status) = self.kepemilikan_tombol.lepas(&nama) else {
+        let kode = Self::kode_virtual_win32(&kejadian.keystroke.key);
+
+        let rekaman_win32 = self.ambil_rekaman_win32(kode, false, None);
+
+        let identitas = self.identitas_kepemilikan(&nama, kode, rekaman_win32);
+
+        let Some(status) = self.kepemilikan_tombol.lepas(&identitas) else {
             return;
         };
 
         if let StatusKepemilikanTombol::Dimiliki(id) = status
             && let Some(ruang) = self.manajer.ambil_mut(id)
+            && !ruang.lepas_tombol_win32(&identitas, rekaman_win32)
+            && identitas == nama
         {
             ruang.lepas_tombol_kitty(&kejadian.keystroke);
         }
@@ -185,10 +280,18 @@ impl JendelaTerminal {
     ) {
         let nama = kejadian.keystroke.key.to_ascii_lowercase();
 
+        let kode = Self::kode_virtual_win32(&kejadian.keystroke.key);
+
+        let rekaman_win32 = self.ambil_rekaman_win32(kode, true, Some(kejadian.is_held));
+
+        let identitas = self.identitas_kepemilikan(&nama, kode, rekaman_win32);
+
         if kejadian.is_held {
-            if let Some(status) = self.kepemilikan_tombol.ambil(&nama) {
+            if let Some(status) = self.kepemilikan_tombol.ambil(&identitas) {
                 if let StatusKepemilikanTombol::Dimiliki(id) = status
                     && let Some(ruang) = self.manajer.ambil_mut(id)
+                    && !ruang.ulangi_tombol_win32(&identitas, rekaman_win32)
+                    && identitas == nama
                 {
                     ruang.ulangi_tombol_kitty(&kejadian.keystroke);
                 }
@@ -198,10 +301,14 @@ impl JendelaTerminal {
                 return;
             }
         } else if let Some(StatusKepemilikanTombol::Dimiliki(id)) =
-            self.kepemilikan_tombol.lepas(&nama)
+            self.kepemilikan_tombol.lepas(&identitas)
             && let Some(ruang) = self.manajer.ambil_mut(id)
         {
-            ruang.tombol_kitty_ditekan.remove(&nama);
+            if identitas == nama {
+                ruang.tombol_kitty_ditekan.remove(&nama);
+            } else {
+                ruang.lepas_tombol_win32(&identitas, None);
+            }
         }
 
         if self.tarikan_panel.is_some() {
@@ -233,12 +340,21 @@ impl JendelaTerminal {
             return;
         }
 
-        self.ruang_mut().proses_tombol(kejadian, jendela, konteks);
+        self.ruang_mut()
+            .proses_tombol(kejadian, rekaman_win32, jendela, konteks);
 
-        if let Some(id) = self.manajer.id_panel_aktif()
-            && self.ruang().tombol_kitty_ditekan.contains_key(&nama)
-        {
-            self.kepemilikan_tombol.catat(&nama, id);
+        if let Some(id) = self.manajer.id_panel_aktif() {
+            if let Some(rekaman) = rekaman_win32
+                && self
+                    .ruang()
+                    .tombol_win32_ditekan
+                    .contains_key(&identitas_tombol_win32(rekaman))
+            {
+                self.kepemilikan_tombol
+                    .catat(&identitas_tombol_win32(rekaman), id);
+            } else if self.ruang().tombol_kitty_ditekan.contains_key(&nama) {
+                self.kepemilikan_tombol.catat(&nama, id);
+            }
         }
     }
 

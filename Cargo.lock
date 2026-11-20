@@ -5228,8 +5228,10 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "portable-pty",
+ "raw-window-handle",
  "regex",
  "vte",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 

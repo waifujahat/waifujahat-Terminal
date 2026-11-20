@@ -13,7 +13,8 @@ use gpui::{
 };
 
 use waifujahat_terminal::terminal::{
-    AksiPengajuan, PengubahTombol, PosisiSeleksi, TombolKhusus, TombolTerminal, sandi_tempel,
+    AksiPengajuan, PengubahTombol, PosisiSeleksi, RekamanTombolWin32, TombolKhusus, TombolTerminal,
+    sandi_tempel,
 };
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
@@ -493,6 +494,7 @@ impl RuangSesi {
     pub(super) fn proses_tombol(
         &mut self,
         kejadian: &KeyDownEvent,
+        rekaman_win32: Option<RekamanTombolWin32>,
         _jendela: &mut Window,
         konteks: &mut Context<JendelaTerminal>,
     ) {
@@ -622,6 +624,18 @@ impl RuangSesi {
                 self.keadaan.seleksi.bersihkan();
             }
 
+            if !kejadian.is_held
+                && let Some(rekaman) = rekaman_win32
+                && self.tekan_tombol_win32(rekaman)
+            {
+                self.gulir.scroll_to_bottom();
+
+                konteks.stop_propagation();
+                konteks.notify();
+
+                return;
+            }
+
             let pengubah = PengubahTombol {
                 shift: tombol.modifiers.shift,
                 alt: tombol.modifiers.alt,
@@ -631,6 +645,28 @@ impl RuangSesi {
             self.kirim_input_langsung(TombolTerminal::Khusus(tombol_khusus, pengubah));
 
             self.gulir.scroll_to_bottom();
+            konteks.notify();
+
+            return;
+        }
+
+        let shortcut_kontrol_internal = matches!(nama_tombol.as_str(), "c" | "v")
+            || (shell_siap && matches!(nama_tombol.as_str(), "m" | "j"));
+
+        if tombol.modifiers.control
+            && !tombol.modifiers.alt
+            && !tombol.modifiers.platform
+            && !shortcut_kontrol_internal
+            && !kejadian.is_held
+            && let Some(rekaman) = rekaman_win32
+            && matches!(rekaman.kode_virtual, 0x41..=0x5A)
+            && rekaman.unicode == rekaman.kode_virtual - 0x40
+            && rekaman.status_kontrol & 0x000C != 0
+            && self.tekan_tombol_win32(rekaman)
+        {
+            self.gulir.scroll_to_bottom();
+
+            konteks.stop_propagation();
             konteks.notify();
 
             return;
@@ -683,6 +719,22 @@ impl RuangSesi {
         }
 
         if tombol.modifiers.alt {
+            if !tombol.modifiers.control
+                && !tombol.modifiers.platform
+                && !kejadian.is_held
+                && let Some(rekaman) = rekaman_win32
+                && matches!(rekaman.kode_virtual, 0x41..=0x5A)
+                && matches!(rekaman.unicode, 0x41..=0x5A | 0x61..=0x7A)
+                && rekaman.status_kontrol & 0x0003 != 0
+                && rekaman.status_kontrol & 0x000C == 0
+                && self.tekan_tombol_win32(rekaman)
+            {
+                self.gulir.scroll_to_bottom();
+
+                konteks.stop_propagation();
+                konteks.notify();
+            }
+
             return;
         }
 
@@ -694,6 +746,36 @@ impl RuangSesi {
         if self.mode_grid_aktif() && self.keadaan.motor.offset_riwayat() > 0 {
             self.keadaan.motor.kembali_ke_bawah();
             self.keadaan.seleksi.bersihkan();
+        }
+
+        let masukan_win32 = rekaman_win32.filter(|rekaman| match nama_tombol.as_str() {
+            "enter" | "return" => !shell_siap && rekaman.kode_virtual == 0x0D,
+
+            "tab" | "backtab" => rekaman.kode_virtual == 0x09,
+
+            "backspace" => rekaman.kode_virtual == 0x08,
+
+            "escape" | "esc" => rekaman.kode_virtual == 0x1B,
+
+            _ => {
+                matches!(rekaman.unicode, 0x20..=0x7E)
+                    && tombol
+                        .key_char
+                        .as_deref()
+                        .is_none_or(|teks| teks.as_bytes() == [rekaman.unicode as u8])
+            }
+        });
+
+        if !kejadian.is_held
+            && let Some(rekaman) = masukan_win32
+            && self.tekan_tombol_win32(rekaman)
+        {
+            self.gulir.scroll_to_bottom();
+
+            konteks.stop_propagation();
+            konteks.notify();
+
+            return;
         }
 
         match nama_tombol.as_str() {
