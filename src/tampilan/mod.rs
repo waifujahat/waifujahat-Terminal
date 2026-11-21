@@ -46,6 +46,12 @@ use keyboard_win32::{PengamatKeyboardWin32, kode_virtual_keyboard};
 
 use edit_nama_tab::EditNamaTab;
 
+use waifujahat_terminal::konfigurasi::PengaturanTerminal;
+
+pub(crate) struct PengaturanAplikasi(pub(crate) PengaturanTerminal);
+
+impl gpui::Global for PengaturanAplikasi {}
+
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
     manajer: ManajerTab<RuangSesi>,
@@ -60,6 +66,7 @@ pub(crate) struct JendelaTerminal {
     pengamat_keyboard_win32: Option<PengamatKeyboardWin32>,
     pemantau_shell: Option<PemantauProsesShell>,
     edit_nama_tab: Option<EditNamaTab>,
+    pengaturan: PengaturanTerminal,
 }
 
 impl JendelaTerminal {
@@ -68,9 +75,26 @@ impl JendelaTerminal {
 
         jendela.focus(&fokus, konteks);
 
+        let pengaturan = konteks
+            .try_global::<PengaturanAplikasi>()
+            .map(|global| global.0.clone());
+
         let mut manajer = ManajerTab::baru();
 
-        manajer.tambah_tab(RuangSesi::baru());
+        let ruang = match pengaturan.as_ref() {
+            Some(pengaturan) => {
+                let profil = pengaturan
+                    .shell_default
+                    .profil_tersedia()
+                    .unwrap_or_default();
+
+                RuangSesi::baru_dengan_pengaturan(profil, pengaturan)
+            }
+
+            None => RuangSesi::baru(),
+        };
+
+        manajer.tambah_tab(ruang);
 
         #[cfg(windows)]
         let pengamat_keyboard_win32 = match PengamatKeyboardWin32::pasang(jendela) {
@@ -142,6 +166,7 @@ impl JendelaTerminal {
             pengamat_keyboard_win32,
             pemantau_shell,
             edit_nama_tab: None,
+            pengaturan: pengaturan.unwrap_or_default(),
         };
 
         terminal.sesuaikan_ukuran(jendela, konteks);
@@ -258,7 +283,7 @@ impl JendelaTerminal {
     pub(super) fn sesuaikan_ukuran(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
         self.tarikan_panel = None;
 
-        self.lebar_karakter = RuangSesi::lebar_karakter_grid(jendela);
+        self.lebar_karakter = self.ruang().lebar_karakter_grid(jendela);
 
         konteks.notify();
     }

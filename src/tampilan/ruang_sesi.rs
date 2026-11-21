@@ -19,6 +19,8 @@ use std::collections::HashMap;
 
 use super::keyboard_kitty::TombolKittyDitekan;
 
+use waifujahat_terminal::konfigurasi::PengaturanTerminal;
+
 pub(super) struct RuangSesi {
     pub(super) profil: ProfilShell,
     pub(super) keadaan: KeadaanSesi,
@@ -35,6 +37,7 @@ pub(super) struct RuangSesi {
     pub(super) tombol_kitty_ditekan: HashMap<String, TombolKittyDitekan>,
     pub(super) tombol_win32_ditekan: HashMap<String, RekamanTombolWin32>,
     pub(super) shell_turunan: Vec<ProsesTerminal>,
+    pub(super) pengaturan: PengaturanTerminal,
 }
 
 impl RuangSesi {
@@ -45,7 +48,19 @@ impl RuangSesi {
     }
 
     pub(super) fn baru_dengan_profil(profil: ProfilShell) -> Self {
-        let mut keadaan = KeadaanSesi::baru(80, 24);
+        Self::baru_dengan_pengaturan(profil, &PengaturanTerminal::default())
+    }
+
+    pub(super) fn baru_dengan_pengaturan(
+        profil: ProfilShell,
+        pengaturan: &PengaturanTerminal,
+    ) -> Self {
+        let mut keadaan = KeadaanSesi::baru_dengan_pengaturan(
+            80,
+            24,
+            pengaturan.konfirmasi_aktif,
+            pengaturan.batas_riwayat,
+        );
 
         let (sesi, status) = match SesiTerminal::baru_dengan_profil(profil) {
             Ok(sesi) => (Some(sesi), String::new()),
@@ -55,12 +70,13 @@ impl RuangSesi {
 
                 (
                     None,
-                    format!("Gagal membuka {}: {kesalahan}", profil.nama()),
+                    format!("Gagal membuka {} : {kesalahan}", profil.nama()),
                 )
             }
         };
 
         Self {
+            pengaturan: pengaturan.clone(),
             profil,
             keadaan,
             sesi,

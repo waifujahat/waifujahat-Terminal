@@ -34,9 +34,13 @@ pub struct SiklusPerintah {
 
 impl SiklusPerintah {
     pub fn baru() -> Self {
+        Self::baru_dengan_konfirmasi(true)
+    }
+
+    pub fn baru_dengan_konfirmasi(konfirmasi_aktif: bool) -> Self {
         Self {
             status: StatusPerintah::Siap,
-            konfirmasi_aktif: true,
+            konfirmasi_aktif,
             durasi_terakhir: None,
             kode_keluar_terakhir: None,
         }

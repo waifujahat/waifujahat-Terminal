@@ -21,7 +21,7 @@ use alacritty_terminal::{
         cell::{Cell, Flags},
         test::TermSize,
     },
-    vte::ansi::Processor,
+    vte::ansi::{Color, NamedColor, Processor},
 };
 
 use super::PerintahModeKitty;
@@ -58,22 +58,34 @@ pub struct MotorTerminal {
 
 impl MotorTerminal {
     pub fn baru(kolom: usize, baris: usize) -> Self {
-        Self::buat(kolom, baris, false)
+        Self::buat(kolom, baris, false, None)
     }
 
     pub fn baru_dengan_kitty(kolom: usize, baris: usize) -> Self {
-        Self::buat(kolom, baris, true)
+        Self::buat(kolom, baris, true, None)
     }
 
-    fn buat(kolom: usize, baris: usize, kitty: bool) -> Self {
+    pub fn baru_dengan_kitty_dan_riwayat(
+        kolom: usize,
+        baris: usize,
+        batas_riwayat: Option<usize>,
+    ) -> Self {
+        Self::buat(kolom, baris, true, batas_riwayat)
+    }
+
+    fn buat(kolom: usize, baris: usize, kitty: bool, batas_riwayat: Option<usize>) -> Self {
         let ukuran = TermSize::new(kolom.max(2), baris.max(1));
 
         let (pengirim_respons, penerima_respons) = mpsc::channel();
 
-        let konfigurasi = Config {
+        let mut konfigurasi = Config {
             kitty_keyboard: false,
             ..Config::default()
         };
+
+        if let Some(batas) = batas_riwayat {
+            konfigurasi.scrolling_history = batas;
+        }
 
         Self {
             terminal: Term::new(
@@ -702,21 +714,30 @@ impl MotorTerminal {
                     teks.extend(tambahan.iter().copied());
                 }
 
-                let mut depan = warna_rgb(sel.fg, warna_teks, warna_latar);
-
-                let mut belakang = warna_rgb(sel.bg, warna_teks, warna_latar);
+                let mut warna_depan = sel.fg;
+                let mut warna_belakang = sel.bg;
 
                 if sel.flags.contains(Flags::INVERSE) {
-                    std::mem::swap(&mut depan, &mut belakang);
+                    std::mem::swap(&mut warna_depan, &mut warna_belakang);
                 }
 
-                if sel.flags.contains(Flags::HIDDEN) {
-                    depan = belakang;
-                }
+                let latar_default = matches!(warna_belakang, Color::Named(NamedColor::Background));
+
+                let tersembunyi = sel.flags.contains(Flags::HIDDEN);
+
+                let belakang = warna_rgb(warna_belakang, warna_teks, warna_latar);
+
+                let depan = if tersembunyi {
+                    belakang
+                } else {
+                    warna_rgb(warna_depan, warna_teks, warna_latar)
+                };
 
                 if let Some(terakhir) = potongan.last_mut()
                     && terakhir.warna_teks == depan
                     && terakhir.warna_latar == belakang
+                    && terakhir.latar_default == latar_default
+                    && terakhir.tersembunyi == tersembunyi
                 {
                     terakhir.teks.push_str(&teks);
                     continue;
@@ -726,6 +747,8 @@ impl MotorTerminal {
                     teks,
                     warna_teks: depan,
                     warna_latar: belakang,
+                    latar_default,
+                    tersembunyi,
                 });
             }
 

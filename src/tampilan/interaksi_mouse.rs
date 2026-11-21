@@ -19,17 +19,12 @@ impl RuangSesi {
         let batas = self.gulir.bounds_for_item(0)?;
         let offset = self.gulir.offset();
 
-        let lebar_karakter = Self::lebar_karakter_grid(jendela);
+        let lebar_karakter = self.lebar_karakter_grid(jendela);
 
         let x = f32::from(posisi.x - (batas.left() + offset.x));
         let y = f32::from(posisi.y - (batas.top() + offset.y));
 
-        if x < 0.0 || y < 0.0 {
-            return None;
-        }
-
-        let kolom = (x / lebar_karakter).floor() as usize;
-        let baris = (y / 18.0).floor() as usize;
+        let (kolom, baris) = self.pengaturan.posisi_grid(x, y, lebar_karakter)?;
 
         let (jumlah_kolom, jumlah_baris) = self.keadaan.motor.ukuran();
 
