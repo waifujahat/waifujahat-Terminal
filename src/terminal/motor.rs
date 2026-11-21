@@ -24,21 +24,15 @@ use alacritty_terminal::{
     vte::ansi::Processor,
 };
 
-use super::tombol::{PengubahTombol, TombolTerminal};
-
-use super::keyboard_kitty::{JenisAksiTombol, sandi_kitty_tombol, sandi_kitty_unicode};
-
-use super::negosiasi_kitty::NegosiasiKitty;
-
 use super::PerintahModeKitty;
-
-use std::time::Instant;
-
+use super::keyboard_kitty::{JenisAksiTombol, sandi_kitty_tombol, sandi_kitty_unicode};
 use super::keyboard_win32::RekamanTombolWin32;
-
 use super::mode_win32::ModeInputWin32;
-
+use super::negosiasi_kitty::NegosiasiKitty;
 use super::protokol_keyboard::ProtokolKeyboard;
+use super::seleksi::PosisiSeleksi;
+use super::tombol::{PengubahTombol, TombolTerminal};
+use std::time::Instant;
 
 struct PengirimRespons {
     pengirim: Sender<Vec<u8>>,
@@ -651,6 +645,39 @@ impl MotorTerminal {
         }
 
         indeks_karakter
+    }
+
+    pub fn posisi_seleksi_grid(&self, baris: usize, posisi: f32) -> Option<PosisiSeleksi> {
+        let (jumlah_kolom, jumlah_baris) = self.ukuran();
+
+        if baris >= jumlah_baris {
+            return None;
+        }
+
+        let mut teks = String::new();
+
+        for kolom in 0..jumlah_kolom {
+            let sel = self.sel(baris, kolom)?;
+
+            if sel.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                continue;
+            }
+
+            teks.push(sel.c);
+
+            if let Some(tambahan) = sel.zerowidth() {
+                teks.extend(tambahan.iter().copied());
+            }
+        }
+
+        let panjang = teks.trim_end_matches(' ').chars().count();
+
+        let kolom = self.indeks_karakter_grid(baris, posisi).min(panjang);
+
+        Some(PosisiSeleksi::baru(
+            self.indeks_awal_tampilan() + baris,
+            kolom,
+        ))
     }
 
     pub fn baris_berwarna(&self, warna_teks: u32, warna_latar: u32) -> Vec<Vec<PotonganWarna>> {

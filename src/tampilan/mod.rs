@@ -6,6 +6,7 @@
  */
 
 mod divider_panel;
+mod edit_nama_tab;
 mod input_win32;
 mod interaksi;
 mod interaksi_mouse;
@@ -31,7 +32,8 @@ use gpui::{
 };
 
 use waifujahat_terminal::terminal::{
-    IdSesi, KepemilikanTombol, ManajerTab, RekamanTombolWin32, StatusKepemilikanTombol,
+    IdSesi, KepemilikanTombol, ManajerTab, PemantauProsesShell, RekamanTombolWin32,
+    StatusKepemilikanTombol,
 };
 
 use divider_panel::TarikanPanel;
@@ -41,6 +43,8 @@ use input_win32::identitas_tombol_win32;
 
 #[cfg(windows)]
 use keyboard_win32::{PengamatKeyboardWin32, kode_virtual_keyboard};
+
+use edit_nama_tab::EditNamaTab;
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
@@ -54,6 +58,8 @@ pub(crate) struct JendelaTerminal {
     tarikan_panel: Option<TarikanPanel>,
     #[cfg(windows)]
     pengamat_keyboard_win32: Option<PengamatKeyboardWin32>,
+    pemantau_shell: Option<PemantauProsesShell>,
+    edit_nama_tab: Option<EditNamaTab>,
 }
 
 impl JendelaTerminal {
@@ -110,6 +116,18 @@ impl JendelaTerminal {
             }
         });
 
+        let pemantau_shell = match PemantauProsesShell::baru() {
+            Ok(pemantau) => Some(pemantau),
+
+            Err(kesalahan) => {
+                if std::env::var_os("WAIFUJAHAT_DEBUG_SHELL").is_some() {
+                    eprintln!("Gagal membuka pemantau shell : {Error}", Error = kesalahan);
+                }
+
+                None
+            }
+        };
+
         let mut terminal = Self {
             fokus,
             manajer,
@@ -122,6 +140,8 @@ impl JendelaTerminal {
             tarikan_panel: None,
             #[cfg(windows)]
             pengamat_keyboard_win32,
+            pemantau_shell,
+            edit_nama_tab: None,
         };
 
         terminal.sesuaikan_ukuran(jendela, konteks);
@@ -288,7 +308,9 @@ impl JendelaTerminal {
 
         if kejadian.is_held {
             if let Some(status) = self.kepemilikan_tombol.ambil(&identitas) {
-                if let StatusKepemilikanTombol::Dimiliki(id) = status
+                if status == StatusKepemilikanTombol::EditorNamaTab {
+                    self.tangani_tombol_edit_nama_tab(kejadian, konteks);
+                } else if let StatusKepemilikanTombol::Dimiliki(id) = status
                     && let Some(ruang) = self.manajer.ambil_mut(id)
                     && !ruang.ulangi_tombol_win32(&identitas, rekaman_win32)
                     && identitas == nama
@@ -298,6 +320,7 @@ impl JendelaTerminal {
 
                 konteks.stop_propagation();
                 konteks.notify();
+
                 return;
             }
         } else if let Some(StatusKepemilikanTombol::Dimiliki(id)) =
@@ -317,26 +340,39 @@ impl JendelaTerminal {
             }
 
             konteks.stop_propagation();
+
             return;
         }
 
         if self.menu_split.is_some() {
             if kejadian.keystroke.key.eq_ignore_ascii_case("escape") {
                 self.menu_split = None;
+
                 konteks.notify();
             }
 
             konteks.stop_propagation();
+
+            return;
+        }
+
+        if self.tangani_tombol_edit_nama_tab(kejadian, konteks) {
+            self.kepemilikan_tombol.tandai_editor_nama_tab(&identitas);
+
+            konteks.stop_propagation();
+
             return;
         }
 
         if self.tangani_tombol_sesi(kejadian, jendela, konteks) {
             konteks.stop_propagation();
+
             return;
         }
 
         if self.tangani_tombol_pencarian(kejadian, konteks) {
             konteks.stop_propagation();
+
             return;
         }
 

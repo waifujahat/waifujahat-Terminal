@@ -49,19 +49,17 @@ pub(super) fn petakan_tombol_khusus(nama: &str) -> Option<TombolKhusus> {
 }
 
 impl RuangSesi {
-    fn posisi_dari_mouse(
+    pub(super) fn posisi_dari_mouse(
         &self,
         posisi: Point<Pixels>,
         jendela: &mut Window,
     ) -> Option<PosisiSeleksi> {
-        let baris = self.baris_seleksi();
-
         let mode_grid = self.mode_grid_aktif();
 
-        let indeks_awal = if mode_grid {
-            self.keadaan.motor.indeks_awal_tampilan()
+        let baris = if mode_grid {
+            Vec::new()
         } else {
-            0
+            self.baris_seleksi()
         };
 
         let jumlah_terlihat = if mode_grid {
@@ -70,7 +68,7 @@ impl RuangSesi {
             baris.len()
         };
 
-        if baris.is_empty() {
+        if jumlah_terlihat == 0 {
             return None;
         }
 
@@ -97,25 +95,22 @@ impl RuangSesi {
         }
 
         let batas = self.gulir.bounds_for_item(indeks_baris)?;
-        let indeks_seleksi = indeks_awal + indeks_baris;
-        let teks = baris.get(indeks_seleksi)?;
 
-        if teks.is_empty() {
-            return Some(PosisiSeleksi::baru(indeks_seleksi, 0));
-        }
+        let posisi_x = posisi.x - (batas.left() + offset.x);
 
         if mode_grid {
             let lebar = Self::lebar_karakter_grid(jendela);
 
-            let posisi_x = f32::from(posisi.x - (batas.left() + offset.x));
-
-            let kolom = self
+            return self
                 .keadaan
                 .motor
-                .indeks_karakter_grid(indeks_baris, posisi_x / lebar)
-                .min(teks.chars().count());
+                .posisi_seleksi_grid(indeks_baris, f32::from(posisi_x) / lebar);
+        }
 
-            return Some(PosisiSeleksi::baru(indeks_seleksi, kolom));
+        let teks = baris.get(indeks_baris)?;
+
+        if teks.is_empty() {
+            return Some(PosisiSeleksi::baru(indeks_baris, 0));
         }
 
         let font = Font {
@@ -136,7 +131,6 @@ impl RuangSesi {
             .text_system()
             .shape_line(teks.clone().into(), px(14.0), &[run], None);
 
-        let posisi_x = posisi.x - (batas.left() + offset.x);
         let indeks_byte = bentuk.closest_index_for_x(posisi_x).min(teks.len());
 
         let kolom = teks
@@ -144,7 +138,7 @@ impl RuangSesi {
             .take_while(|(indeks, _)| *indeks < indeks_byte)
             .count();
 
-        Some(PosisiSeleksi::baru(indeks_seleksi, kolom))
+        Some(PosisiSeleksi::baru(indeks_baris, kolom))
     }
 
     pub(super) fn mouse_ditekan(
@@ -161,18 +155,22 @@ impl RuangSesi {
 
         let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) else {
             self.keadaan.seleksi.bersihkan();
+
             konteks.notify();
+
             return;
         };
 
-        let baris = self.baris_seleksi();
-
         match kejadian.click_count {
             3.. => {
+                let baris = self.baris_seleksi();
+
                 self.keadaan.seleksi.pilih_baris(&baris, posisi.baris);
             }
 
             2 => {
+                let baris = self.baris_seleksi();
+
                 self.keadaan.seleksi.pilih_kata(&baris, posisi);
             }
 
@@ -196,41 +194,55 @@ impl RuangSesi {
 
         if !self.keadaan.seleksi.sedang_memilih() {
             self.arah_gulir_seleksi = 0;
+
             return;
         }
 
         if kejadian.pressed_button != Some(MouseButton::Left) {
             self.arah_gulir_seleksi = 0;
+
             self.keadaan.seleksi.selesai();
+
             return;
         }
 
         if self.mode_grid_aktif() {
-            let offset = self.gulir.offset().y;
+            let offset = self.gulir.offset();
             let tinggi = self.keadaan.motor.ukuran().1;
 
-            let batas_atas = self
-                .gulir
-                .bounds_for_item(0)
-                .map(|batas| batas.top() + offset);
+            let batas_pertama = self.gulir.bounds_for_item(0);
+
+            let batas_atas = batas_pertama.as_ref().map(|batas| batas.top() + offset.y);
 
             let batas_bawah = self
                 .gulir
                 .bounds_for_item(tinggi.saturating_sub(1))
-                .map(|batas| batas.bottom() + offset);
+                .map(|batas| batas.bottom() + offset.y);
 
             self.arah_gulir_seleksi = match (batas_atas, batas_bawah) {
-                (Some(atas), _) if kejadian.position.y < atas => 1,
-                (_, Some(bawah)) if kejadian.position.y > bawah => -1,
+                (Some(atas), _) if kejadian.position.y < atas => {
+                    langkah_gulir_seleksi(f32::from(atas - kejadian.position.y))
+                }
+
+                (_, Some(bawah)) if kejadian.position.y > bawah => {
+                    -langkah_gulir_seleksi(f32::from(kejadian.position.y - bawah))
+                }
+
                 _ => 0,
             };
+
+            if let Some(batas) = batas_pertama {
+                let posisi_x = kejadian.position.x - (batas.left() + offset.x);
+
+                self.kolom_gulir_seleksi = f32::from(posisi_x) / Self::lebar_karakter_grid(jendela);
+            }
         } else {
             self.arah_gulir_seleksi = 0;
         }
 
         if let Some(posisi) = self.posisi_dari_mouse(kejadian.position, jendela) {
-            self.kolom_gulir_seleksi = posisi.kolom;
             self.keadaan.seleksi.perbarui(posisi);
+
             konteks.notify();
         }
     }
@@ -264,7 +276,7 @@ impl RuangSesi {
         }
 
         let Some(sesi) = &self.sesi else {
-            self.status = "Sesi PowerShell tidak tersedia".into();
+            self.status = "Sesi terminal tidak tersedia".into();
             konteks.notify();
             return;
         };
@@ -291,7 +303,7 @@ impl RuangSesi {
         }
 
         let Some(sesi) = &self.sesi else {
-            self.status = "Sesi PowerShell tidak tersedia".into();
+            self.status = "Sesi terminal tidak tersedia".into();
             return;
         };
 
@@ -320,7 +332,7 @@ impl RuangSesi {
 
     fn kirim_input_langsung(&mut self, tombol: TombolTerminal<'_>) {
         let Some(sesi) = &self.sesi else {
-            self.status = "Sesi PowerShell tidak tersedia".into();
+            self.status = "Sesi terminal tidak tersedia".into();
             return;
         };
 
@@ -332,7 +344,8 @@ impl RuangSesi {
     }
 
     pub(super) fn pindah_kursor_mouse(&mut self, posisi: PosisiSeleksi) {
-        if !self.mode_grid_aktif()
+        if !self.profil.mendukung_integrasi_shell()
+            || !self.mode_grid_aktif()
             || self.keadaan.siklus.berjalan()
             || self.keadaan.siklus.menunggu_konfirmasi()
             || self.keadaan.motor.layar_alternatif_aktif()
@@ -444,7 +457,7 @@ impl RuangSesi {
     }
 
     fn hapus_seleksi_input(&mut self, tombol: TombolTerminal<'_>) -> bool {
-        if self.keadaan.seleksi.rentang().is_none() {
+        if !self.profil.mendukung_integrasi_shell() || self.keadaan.seleksi.rentang().is_none() {
             return false;
         }
 
@@ -462,7 +475,7 @@ impl RuangSesi {
             .collect();
 
         let Some(sesi) = &self.sesi else {
-            self.status = "Sesi PowerShell tidak tersedia".into();
+            self.status = "Sesi terminal tidak tersedia".into();
             return true;
         };
 
@@ -501,7 +514,9 @@ impl RuangSesi {
         let tombol = &kejadian.keystroke;
         let nama_tombol = tombol.key.to_ascii_lowercase();
 
-        let shell_siap = (self.keadaan.siklus.siap() || self.keadaan.siklus.menunggu_konfirmasi())
+        let shell_siap = self.profil.mendukung_integrasi_shell()
+            && self.sesi.is_some()
+            && (self.keadaan.siklus.siap() || self.keadaan.siklus.menunggu_konfirmasi())
             && !self.keadaan.motor.layar_alternatif_aktif();
 
         if shell_siap
@@ -856,5 +871,19 @@ impl RuangSesi {
 
         self.gulir.scroll_to_bottom();
         konteks.notify();
+    }
+}
+
+fn langkah_gulir_seleksi(jarak: f32) -> i8 {
+    if jarak <= 0.0 {
+        0
+    } else if jarak <= 8.0 {
+        1
+    } else if jarak <= 16.0 {
+        3
+    } else if jarak <= 24.0 {
+        6
+    } else {
+        12
     }
 }

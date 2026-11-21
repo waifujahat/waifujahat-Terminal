@@ -53,12 +53,13 @@ impl RuangSesi {
             .min_h_0()
             .flex()
             .flex_col()
-            .overflow_y_scroll()
+            .overflow_hidden()
             .track_scroll(&self.gulir)
             .cursor(CursorStyle::IBeam)
             .on_scroll(konteks.listener(
-                move |terminal, kejadian: &gpui::ScrollEvent, _, konteks| {
+                move |terminal, kejadian: &gpui::ScrollEvent, jendela, konteks| {
                     let delta = kejadian.delta.pixel_delta(px(18.0));
+
                     let jarak = f32::from(delta.y);
 
                     if jarak == 0.0 {
@@ -75,10 +76,19 @@ impl RuangSesi {
 
                     if let Some(ruang) = terminal.manajer.ambil_mut(id) {
                         ruang.keadaan.motor.geser_riwayat(jumlah);
-                        ruang.keadaan.seleksi.bersihkan();
+
+                        ruang.arah_gulir_seleksi = 0;
+
+                        if ruang.keadaan.seleksi.sedang_memilih()
+                            && let Some(posisi) =
+                                ruang.posisi_dari_mouse(kejadian.position, jendela)
+                        {
+                            ruang.keadaan.seleksi.perbarui(posisi);
+                        }
                     }
 
                     konteks.stop_propagation();
+
                     konteks.notify();
                 },
             ))

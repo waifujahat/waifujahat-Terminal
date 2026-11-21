@@ -88,6 +88,17 @@ impl ProfilShell {
         self.lokasi_program().is_some()
     }
 
+    pub fn deteksi_tersedia() -> Vec<(Self, PathBuf)> {
+        Self::SEMUA
+            .into_iter()
+            .filter_map(|profil| profil.lokasi_program().map(|lokasi| (profil, lokasi)))
+            .collect()
+    }
+
+    pub fn default_tersedia() -> Option<Self> {
+        Self::SEMUA.into_iter().find(|profil| profil.tersedia())
+    }
+
     pub(super) fn program_sistem(lokasi: &str) -> Option<PathBuf> {
         let direktori = PathBuf::from(env::var_os("SystemRoot")?);
         let program = direktori.join(lokasi);

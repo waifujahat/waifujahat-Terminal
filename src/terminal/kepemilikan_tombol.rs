@@ -10,6 +10,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusKepemilikanTombol<Id> {
     Dimiliki(Id),
+    EditorNamaTab,
     Dibatalkan,
 }
 
@@ -22,6 +23,20 @@ impl<Id: Copy + Eq> KepemilikanTombol<Id> {
         Self {
             tombol: HashMap::new(),
         }
+    }
+
+    pub fn tandai_editor_nama_tab(&mut self, nama: &str) {
+        self.tombol.insert(
+            nama.to_ascii_lowercase(),
+            StatusKepemilikanTombol::EditorNamaTab,
+        );
+    }
+
+    pub fn tandai_dibatalkan(&mut self, nama: &str) {
+        self.tombol.insert(
+            nama.to_ascii_lowercase(),
+            StatusKepemilikanTombol::Dibatalkan,
+        );
     }
 
     pub fn catat(&mut self, nama: &str, pemilik: Id) -> Option<StatusKepemilikanTombol<Id>> {
