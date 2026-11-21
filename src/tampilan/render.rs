@@ -65,6 +65,9 @@ impl RuangSesi {
             .flex_col()
             .overflow_y_scroll()
             .track_scroll(&self.gulir)
+            .font_family(self.pengaturan.keluarga_font.clone())
+            .text_size(px(self.pengaturan.ukuran_font_efektif()))
+            .line_height(px(self.pengaturan.tinggi_baris()))
             .cursor(CursorStyle::IBeam)
             .on_mouse_down(
                 MouseButton::Left,
@@ -84,7 +87,7 @@ impl RuangSesi {
             let mut elemen_baris = div()
                 .id(format!("baris-terminal-{indeks}"))
                 .w_full()
-                .h(px(18.0))
+                .h(px(self.pengaturan.tinggi_baris()))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
@@ -144,6 +147,8 @@ impl Render for JendelaTerminal {
     fn render(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
         let gambar_latar = konteks.global::<crate::aset::LatarAplikasi>().gambar();
 
+        let warna_lapisan = (0x090d18 << 8) | u32::from(self.pengaturan.alfa_latar());
+
         let halaman = div()
             .id("jendela-terminal")
             .relative()
@@ -195,7 +200,7 @@ impl Render for JendelaTerminal {
                     .size_full()
                     .object_fit(ObjectFit::Cover),
             )
-            .child(div().absolute().inset_0().bg(rgba(0x090d18b3)))
+            .child(div().absolute().inset_0().bg(rgba(warna_lapisan)))
             .child(self.buat_tab_sesi(konteks));
 
         let mut halaman = halaman

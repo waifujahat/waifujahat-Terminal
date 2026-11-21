@@ -99,7 +99,7 @@ impl RuangSesi {
         let posisi_x = posisi.x - (batas.left() + offset.x);
 
         if mode_grid {
-            let lebar = Self::lebar_karakter_grid(jendela);
+            let lebar = self.lebar_karakter_grid(jendela);
 
             return self
                 .keadaan
@@ -114,7 +114,7 @@ impl RuangSesi {
         }
 
         let font = Font {
-            family: "Consolas".into(),
+            family: self.pengaturan.keluarga_font.clone().into(),
             ..Default::default()
         };
 
@@ -127,9 +127,12 @@ impl RuangSesi {
             strikethrough: None,
         };
 
-        let bentuk = jendela
-            .text_system()
-            .shape_line(teks.clone().into(), px(14.0), &[run], None);
+        let bentuk = jendela.text_system().shape_line(
+            teks.clone().into(),
+            px(self.pengaturan.ukuran_font_efektif()),
+            &[run],
+            None,
+        );
 
         let indeks_byte = bentuk.closest_index_for_x(posisi_x).min(teks.len());
 
@@ -234,7 +237,7 @@ impl RuangSesi {
             if let Some(batas) = batas_pertama {
                 let posisi_x = kejadian.position.x - (batas.left() + offset.x);
 
-                self.kolom_gulir_seleksi = f32::from(posisi_x) / Self::lebar_karakter_grid(jendela);
+                self.kolom_gulir_seleksi = f32::from(posisi_x) / self.lebar_karakter_grid(jendela);
             }
         } else {
             self.arah_gulir_seleksi = 0;

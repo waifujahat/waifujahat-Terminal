@@ -38,7 +38,8 @@ impl RuangSesi {
         jendela: &mut Window,
         konteks: &mut Context<JendelaTerminal>,
     ) -> impl IntoElement {
-        let lebar_karakter = Self::lebar_karakter_grid(jendela);
+        let lebar_karakter = self.lebar_karakter_grid(jendela);
+        let tinggi_baris = self.pengaturan.tinggi_baris();
         let snapshot = self.keadaan.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
         let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
         let kursor_terlihat = snapshot.kursor_terlihat;
@@ -55,26 +56,23 @@ impl RuangSesi {
             .flex_col()
             .overflow_hidden()
             .track_scroll(&self.gulir)
+            .font_family(self.pengaturan.keluarga_font.clone())
+            .text_size(px(self.pengaturan.ukuran_font_efektif()))
+            .line_height(px(tinggi_baris))
             .cursor(CursorStyle::IBeam)
             .on_scroll(konteks.listener(
                 move |terminal, kejadian: &gpui::ScrollEvent, jendela, konteks| {
-                    let delta = kejadian.delta.pixel_delta(px(18.0));
+                    let delta = kejadian.delta.pixel_delta(px(tinggi_baris));
 
                     let jarak = f32::from(delta.y);
 
-                    if jarak == 0.0 {
-                        return;
-                    }
-
-                    let jumlah = (jarak / 18.0).round() as isize;
-
-                    let jumlah = if jumlah == 0 {
-                        jarak.signum() as isize
-                    } else {
-                        jumlah
-                    };
-
                     if let Some(ruang) = terminal.manajer.ambil_mut(id) {
+                        let jumlah = ruang.pengaturan.langkah_gulir_grid(jarak);
+
+                        if jumlah == 0 {
+                            return;
+                        }
+
                         ruang.keadaan.motor.geser_riwayat(jumlah);
 
                         ruang.arah_gulir_seleksi = 0;
@@ -122,7 +120,7 @@ impl RuangSesi {
             let mut elemen_baris = div()
                 .id(format!("baris-grid-{indeks}"))
                 .w_full()
-                .h(px(18.0))
+                .h(px(tinggi_baris))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
@@ -203,7 +201,7 @@ impl RuangSesi {
                             .left(px(0.0))
                             .top(px(1.0))
                             .w(px(2.0))
-                            .h(px(16.0))
+                            .h(px(self.pengaturan.tinggi_kursor()))
                             .bg(rgb(WARNA_AKSEN)),
                     );
                 }

@@ -58,22 +58,34 @@ pub struct MotorTerminal {
 
 impl MotorTerminal {
     pub fn baru(kolom: usize, baris: usize) -> Self {
-        Self::buat(kolom, baris, false)
+        Self::buat(kolom, baris, false, None)
     }
 
     pub fn baru_dengan_kitty(kolom: usize, baris: usize) -> Self {
-        Self::buat(kolom, baris, true)
+        Self::buat(kolom, baris, true, None)
     }
 
-    fn buat(kolom: usize, baris: usize, kitty: bool) -> Self {
+    pub fn baru_dengan_kitty_dan_riwayat(
+        kolom: usize,
+        baris: usize,
+        batas_riwayat: Option<usize>,
+    ) -> Self {
+        Self::buat(kolom, baris, true, batas_riwayat)
+    }
+
+    fn buat(kolom: usize, baris: usize, kitty: bool, batas_riwayat: Option<usize>) -> Self {
         let ukuran = TermSize::new(kolom.max(2), baris.max(1));
 
         let (pengirim_respons, penerima_respons) = mpsc::channel();
 
-        let konfigurasi = Config {
+        let mut konfigurasi = Config {
             kitty_keyboard: false,
             ..Config::default()
         };
+
+        if let Some(batas) = batas_riwayat {
+            konfigurasi.scrolling_history = batas;
+        }
 
         Self {
             terminal: Term::new(

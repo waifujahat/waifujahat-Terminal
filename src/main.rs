@@ -2,36 +2,47 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Application / Bootstrap
- * Purpose: Initializes the native GPUI window.
+ * Purpose : Initializes the native GPUI window
  */
 
 mod aset;
+mod cli;
 mod tampilan;
 mod tema;
 
 use gpui::{App, AppContext, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 
-use crate::tampilan::JendelaTerminal;
+use crate::tampilan::{JendelaTerminal, PengaturanAplikasi};
 
-use waifujahat_terminal::terminal::{ProfilShell, deteksi_distribusi_wsl};
+use waifujahat_terminal::konfigurasi::{PengaturanTerminal, PenyimpananPengaturan};
 
 fn main() {
-    if std::env::args_os()
-        .nth(1)
-        .is_some_and(|argumen| argumen == "--list-shells")
-    {
-        tampilkan_profil_shell();
-        return;
+    match cli::jalankan_argumen() {
+        Ok(true) => return,
+
+        Ok(false) => {}
+
+        Err(kesalahan) => {
+            eprintln!("Gagal menjalankan perintah : {Error:#}", Error = kesalahan);
+
+            std::process::exit(1);
+        }
     }
+
+    let pengaturan = muat_pengaturan();
 
     gpui_platform::application()
         .with_assets(aset::AsetAplikasi)
-        .run(|aplikasi: &mut App| {
-            aset::LatarAplikasi::muat(aplikasi).expect("Gagal memuat gambar latar");
+        .run(move |aplikasi: &mut App| {
+            aset::LatarAplikasi::muat_dengan_pengaturan(aplikasi, &pengaturan)
+                .expect("Gagal memuat gambar latar");
 
             let pengaturan_jendela = WindowOptions {
                 window_bounds: Some(WindowBounds::centered(
-                    size(px(1120.0), px(630.0)),
+                    size(
+                        px(pengaturan.lebar_jendela as f32),
+                        px(pengaturan.tinggi_jendela as f32),
+                    ),
                     aplikasi,
                 )),
                 titlebar: Some(TitlebarOptions {
@@ -42,6 +53,8 @@ fn main() {
                 ..Default::default()
             };
 
+            aplikasi.set_global(PengaturanAplikasi(pengaturan));
+
             aplikasi
                 .open_window(pengaturan_jendela, |jendela, konteks| {
                     konteks.new(|konteks| JendelaTerminal::baru(jendela, konteks))
@@ -50,42 +63,19 @@ fn main() {
         });
 }
 
-fn tampilkan_profil_shell() {
-    let daftar = ProfilShell::deteksi_tersedia();
+fn muat_pengaturan() -> PengaturanTerminal {
+    let hasil =
+        PenyimpananPengaturan::bawaan().and_then(|penyimpanan| penyimpanan.muat_atau_buat());
 
-    println!("Waifujahat Terminal");
-    println!();
-    println!("Available shell profiles");
-    println!();
-
-    for (indeks, (profil, lokasi)) in daftar.iter().enumerate() {
-        let penanda = if indeks == 0 { " [Default]" } else { "" };
-
-        println!("{}{}", profil.nama(), penanda);
-        println!("  Path : {}", lokasi.display());
-    }
-
-    if daftar.is_empty() {
-        println!("Tidak ada shell yang tersedia");
-    }
-
-    println!();
-    println!("WSL distributions");
-    println!();
-
-    match deteksi_distribusi_wsl() {
-        Ok(distribusi) if distribusi.is_empty() => {
-            println!("Tidak ada distribusi WSL");
-        }
-
-        Ok(distribusi) => {
-            for nama in distribusi {
-                println!("  {nama}");
-            }
-        }
+    match hasil {
+        Ok(pengaturan) => pengaturan,
 
         Err(kesalahan) => {
-            eprintln!("Gagal mendeteksi WSL : {kesalahan}");
+            eprintln!("Gagal memuat konfigurasi : {Error:#}", Error = kesalahan);
+
+            eprintln!("Menggunakan konfigurasi default");
+
+            PengaturanTerminal::default()
         }
     }
 }

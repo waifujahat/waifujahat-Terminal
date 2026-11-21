@@ -13,7 +13,11 @@ use waifujahat_terminal::terminal::{ArahPanel, IdSesi, IdTab, ProfilShell};
 
 impl JendelaTerminal {
     pub(super) fn tambah_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
-        let profil = ProfilShell::default_tersedia().unwrap_or_default();
+        let profil = self
+            .pengaturan
+            .shell_default
+            .profil_tersedia()
+            .unwrap_or_default();
 
         self.tambah_sesi_dengan_profil(profil, jendela, konteks);
     }
@@ -24,7 +28,7 @@ impl JendelaTerminal {
         jendela: &mut Window,
         konteks: &mut Context<Self>,
     ) {
-        let ruang = RuangSesi::baru_dengan_profil(profil);
+        let ruang = RuangSesi::baru_dengan_pengaturan(profil, &self.pengaturan);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;
@@ -51,7 +55,7 @@ impl JendelaTerminal {
 
         let profil = self.ruang().profil;
 
-        let ruang = RuangSesi::baru_dengan_profil(profil);
+        let ruang = RuangSesi::baru_dengan_pengaturan(profil, &self.pengaturan);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;

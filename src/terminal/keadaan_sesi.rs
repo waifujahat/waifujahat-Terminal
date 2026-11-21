@@ -22,14 +22,23 @@ pub struct KeadaanSesi {
 
 impl KeadaanSesi {
     pub fn baru(kolom: usize, baris: usize) -> Self {
+        Self::baru_dengan_pengaturan(kolom, baris, true, None)
+    }
+
+    pub fn baru_dengan_pengaturan(
+        kolom: usize,
+        baris: usize,
+        konfirmasi_aktif: bool,
+        batas_riwayat: Option<usize>,
+    ) -> Self {
         let mut layar = LayarTerminal::baru();
 
         layar.ubah_tinggi(baris);
 
         Self {
             layar,
-            motor: MotorTerminal::baru_dengan_kitty(kolom, baris),
-            siklus: SiklusPerintah::baru(),
+            motor: MotorTerminal::baru_dengan_kitty_dan_riwayat(kolom, baris, batas_riwayat),
+            siklus: SiklusPerintah::baru_dengan_konfirmasi(konfirmasi_aktif),
             seleksi: SeleksiTerminal::baru(),
             integrasi_shell: ParserIntegrasiShell::baru(),
             integrasi_shell_aktif: false,
