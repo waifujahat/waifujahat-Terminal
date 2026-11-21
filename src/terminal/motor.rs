@@ -21,7 +21,7 @@ use alacritty_terminal::{
         cell::{Cell, Flags},
         test::TermSize,
     },
-    vte::ansi::Processor,
+    vte::ansi::{Color, NamedColor, Processor},
 };
 
 use super::PerintahModeKitty;
@@ -714,21 +714,30 @@ impl MotorTerminal {
                     teks.extend(tambahan.iter().copied());
                 }
 
-                let mut depan = warna_rgb(sel.fg, warna_teks, warna_latar);
-
-                let mut belakang = warna_rgb(sel.bg, warna_teks, warna_latar);
+                let mut warna_depan = sel.fg;
+                let mut warna_belakang = sel.bg;
 
                 if sel.flags.contains(Flags::INVERSE) {
-                    std::mem::swap(&mut depan, &mut belakang);
+                    std::mem::swap(&mut warna_depan, &mut warna_belakang);
                 }
 
-                if sel.flags.contains(Flags::HIDDEN) {
-                    depan = belakang;
-                }
+                let latar_default = matches!(warna_belakang, Color::Named(NamedColor::Background));
+
+                let tersembunyi = sel.flags.contains(Flags::HIDDEN);
+
+                let belakang = warna_rgb(warna_belakang, warna_teks, warna_latar);
+
+                let depan = if tersembunyi {
+                    belakang
+                } else {
+                    warna_rgb(warna_depan, warna_teks, warna_latar)
+                };
 
                 if let Some(terakhir) = potongan.last_mut()
                     && terakhir.warna_teks == depan
                     && terakhir.warna_latar == belakang
+                    && terakhir.latar_default == latar_default
+                    && terakhir.tersembunyi == tersembunyi
                 {
                     terakhir.teks.push_str(&teks);
                     continue;
@@ -738,6 +747,8 @@ impl MotorTerminal {
                     teks,
                     warna_teks: depan,
                     warna_latar: belakang,
+                    latar_default,
+                    tersembunyi,
                 });
             }
 

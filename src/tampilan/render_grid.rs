@@ -8,6 +8,7 @@
 use gpui::{Context, CursorStyle, MouseButton, Window, div, prelude::*, px, rgb};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
+use crate::tema::kontras::PaletKontras;
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 use waifujahat_terminal::terminal::IdSesi;
 
@@ -40,6 +41,7 @@ impl RuangSesi {
     ) -> impl IntoElement {
         let lebar_karakter = self.lebar_karakter_grid(jendela);
         let tinggi_baris = self.pengaturan.tinggi_baris();
+        let mut palet = PaletKontras::baru(self.pengaturan.alfa_latar());
         let snapshot = self.keadaan.motor.ambil_snapshot(WARNA_TEKS, WARNA_LATAR);
         let (baris_kursor, kolom_kursor) = snapshot.posisi_kursor;
         let kursor_terlihat = snapshot.kursor_terlihat;
@@ -174,25 +176,37 @@ impl RuangSesi {
                     lebar_karakter
                 };
 
+                let (warna_teks, warna_latar) = if terpilih {
+                    (sel.warna_teks, Some(WARNA_SELEKSI))
+                } else if cocok_aktif {
+                    (0x101010, Some(WARNA_PENCARIAN_AKTIF))
+                } else if cocok {
+                    (sel.warna_teks, Some(WARNA_PENCARIAN))
+                } else if !sel.latar_default {
+                    (sel.warna_teks, Some(sel.warna_latar))
+                } else {
+                    (sel.warna_teks, None)
+                };
+
+                let gaya = palet.gaya(&sel.teks, warna_teks, warna_latar, sel.tersembunyi);
+
                 let mut elemen_sel = div()
                     .w(px(lebar_sel))
                     .flex_shrink_0()
                     .whitespace_nowrap()
-                    .text_color(rgb(sel.warna_teks));
+                    .text_color(rgb(gaya.warna_teks.unwrap_or(WARNA_TEKS)));
 
-                if terpilih {
-                    elemen_sel = elemen_sel.bg(rgb(WARNA_SELEKSI));
-                } else if cocok_aktif {
-                    elemen_sel = elemen_sel
-                        .bg(rgb(WARNA_PENCARIAN_AKTIF))
-                        .text_color(rgb(0x101010));
-                } else if cocok {
-                    elemen_sel = elemen_sel.bg(rgb(WARNA_PENCARIAN));
-                } else if !sel.latar_default {
-                    elemen_sel = elemen_sel.bg(rgb(sel.warna_latar));
+                if let Some(latar) = gaya.warna_latar {
+                    elemen_sel = elemen_sel.bg(rgb(latar));
                 }
 
-                let mut elemen_sel = elemen_sel.child(sel.teks);
+                let teks = if gaya.warna_teks.is_none() {
+                    " ".to_owned()
+                } else {
+                    sel.teks
+                };
+
+                let mut elemen_sel = elemen_sel.child(teks);
 
                 if kursor_aktif && kolom == kolom_kursor {
                     elemen_sel = elemen_sel.relative().child(

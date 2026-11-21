@@ -2,7 +2,7 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Interface / Rendering
- * Purpose: Renders ANSI output, selection and terminal application chrome
+ * Purpose : Renders ANSI output, selection and terminal application chrome
  */
 
 use gpui::{
@@ -14,6 +14,7 @@ use waifujahat_terminal::terminal::IdSesi;
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
+use crate::tema::kontras::{PaletKontras, WARNA_LAPISAN};
 use crate::tema::{WARNA_AKSEN, WARNA_LATAR, WARNA_TEKS};
 
 const WARNA_SELEKSI: u32 = 0x493663;
@@ -56,6 +57,23 @@ impl RuangSesi {
         let warna_motor = self.keadaan.motor.baris_berwarna(WARNA_TEKS, WARNA_LATAR);
         let pergeseran = jumlah_baris.saturating_sub(baris_motor.len());
 
+        let mut palet = PaletKontras::baru(self.pengaturan.alfa_latar());
+
+        let mut buat_teks =
+            |teks: String, warna_teks: u32, warna_latar: Option<u32>, tersembunyi: bool| {
+                let gaya = palet.gaya(&teks, warna_teks, warna_latar, tersembunyi);
+
+                let mut elemen = div()
+                    .whitespace_nowrap()
+                    .text_color(gaya.warna_teks.map_or(rgba(0), rgb));
+
+                if let Some(latar) = gaya.warna_latar {
+                    elemen = elemen.bg(rgb(latar));
+                }
+
+                elemen.child(teks)
+            };
+
         let mut keluaran = div()
             .id(format!("keluaran-terminal-{}", id.nilai()))
             .w_full()
@@ -93,47 +111,93 @@ impl RuangSesi {
                 .items_center()
                 .whitespace_nowrap();
 
-            if let Some((mulai, selesai)) = self.keadaan.seleksi.potongan_baris(indeks, &teks) {
+            let rentang = self.keadaan.seleksi.potongan_baris(indeks, &teks);
+
+            let indeks_motor = indeks.checked_sub(pergeseran);
+
+            let baris_cocok = indeks_motor
+                .and_then(|indeks| baris_motor.get(indeks).zip(warna_motor.get(indeks)))
+                .filter(|(teks_motor, _)| teks_motor.trim_end() == teks.trim_end());
+
+            let mut buat_potongan = |teks: &str,
+                                     posisi: usize,
+                                     warna_teks: u32,
+                                     warna_latar: Option<u32>,
+                                     tersembunyi: bool| {
+                let panjang = teks.chars().count();
+
+                let (mulai, selesai) = rentang.map_or((0, 0), |(mulai, selesai)| {
+                    (
+                        mulai.saturating_sub(posisi).min(panjang),
+                        selesai.saturating_sub(posisi).min(panjang),
+                    )
+                });
+
+                let mut elemen = div().flex().items_center().whitespace_nowrap();
+
+                if mulai == selesai {
+                    return elemen.child(buat_teks(
+                        teks.to_owned(),
+                        warna_teks,
+                        warna_latar,
+                        tersembunyi,
+                    ));
+                }
+
                 let karakter: Vec<char> = teks.chars().collect();
 
-                let sebelum: String = karakter[..mulai].iter().collect();
-                let dipilih: String = karakter[mulai..selesai].iter().collect();
-                let sesudah: String = karakter[selesai..].iter().collect();
-
-                elemen_baris = elemen_baris
-                    .child(div().whitespace_nowrap().child(sebelum))
-                    .child(
-                        div()
-                            .whitespace_nowrap()
-                            .bg(rgb(WARNA_SELEKSI))
-                            .child(dipilih),
-                    )
-                    .child(div().whitespace_nowrap().child(sesudah));
-            } else {
-                let indeks_motor = indeks.checked_sub(pergeseran);
-
-                let baris_cocok = indeks_motor
-                    .and_then(|indeks| baris_motor.get(indeks).zip(warna_motor.get(indeks)))
-                    .filter(|(teks_motor, _)| teks_motor.trim_end() == teks.trim_end());
-
-                if let Some((_, potongan)) = baris_cocok {
-                    let mut teks_berwarna = div().flex().items_center().whitespace_nowrap();
-
-                    for bagian in potongan {
-                        let mut elemen_teks =
-                            div().whitespace_nowrap().text_color(rgb(bagian.warna_teks));
-
-                        if bagian.warna_latar != WARNA_LATAR {
-                            elemen_teks = elemen_teks.bg(rgb(bagian.warna_latar));
-                        }
-
-                        teks_berwarna = teks_berwarna.child(elemen_teks.child(bagian.teks.clone()));
+                for (potongan, latar) in [
+                    (&karakter[..mulai], warna_latar),
+                    (&karakter[mulai..selesai], Some(WARNA_SELEKSI)),
+                    (&karakter[selesai..], warna_latar),
+                ] {
+                    if potongan.is_empty() {
+                        continue;
                     }
 
-                    elemen_baris = elemen_baris.child(teks_berwarna);
-                } else {
-                    elemen_baris = elemen_baris.child(div().whitespace_nowrap().child(tampilan));
+                    elemen = elemen.child(buat_teks(
+                        potongan.iter().collect(),
+                        warna_teks,
+                        latar,
+                        tersembunyi,
+                    ));
                 }
+
+                elemen
+            };
+
+            if let Some((_, potongan)) = baris_cocok {
+                let mut teks_berwarna = div().flex().items_center().whitespace_nowrap();
+
+                let mut posisi = 0;
+
+                for bagian in potongan {
+                    let latar = (!bagian.latar_default).then_some(bagian.warna_latar);
+
+                    teks_berwarna = teks_berwarna.child(buat_potongan(
+                        &bagian.teks,
+                        posisi,
+                        bagian.warna_teks,
+                        latar,
+                        bagian.tersembunyi,
+                    ));
+
+                    posisi += bagian.teks.chars().count();
+                }
+
+                if rentang.is_some() {
+                    let sisa: String = teks.chars().skip(posisi).collect();
+
+                    if !sisa.is_empty() {
+                        teks_berwarna = teks_berwarna
+                            .child(buat_potongan(&sisa, posisi, WARNA_TEKS, None, false));
+                    }
+                }
+
+                elemen_baris = elemen_baris.child(teks_berwarna);
+            } else {
+                elemen_baris =
+                    elemen_baris.child(buat_potongan(&tampilan, 0, WARNA_TEKS, None, false));
             }
 
             keluaran = keluaran.child(elemen_baris);
@@ -147,7 +211,7 @@ impl Render for JendelaTerminal {
     fn render(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) -> impl IntoElement {
         let gambar_latar = konteks.global::<crate::aset::LatarAplikasi>().gambar();
 
-        let warna_lapisan = (0x090d18 << 8) | u32::from(self.pengaturan.alfa_latar());
+        let warna_lapisan = (WARNA_LAPISAN << 8) | u32::from(self.pengaturan.alfa_latar());
 
         let halaman = div()
             .id("jendela-terminal")

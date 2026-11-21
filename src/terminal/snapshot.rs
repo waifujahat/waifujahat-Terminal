@@ -18,6 +18,7 @@ pub struct SelSnapshot {
     pub warna_teks: u32,
     pub warna_latar: u32,
     pub latar_default: bool,
+    pub tersembunyi: bool,
     pub lebar_ganda: bool,
     pub pengisi_lebar_ganda: bool,
 }
@@ -93,6 +94,7 @@ impl MotorTerminal {
                             warna_teks: warna_teks_sel,
                             warna_latar: warna_latar_sel,
                             latar_default,
+                            tersembunyi: sel.flags.contains(Flags::HIDDEN),
                             lebar_ganda: sel.flags.contains(Flags::WIDE_CHAR),
                             pengisi_lebar_ganda,
                         }

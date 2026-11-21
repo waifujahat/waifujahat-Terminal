@@ -17,6 +17,8 @@ pub struct PotonganWarna {
     pub teks: String,
     pub warna_teks: u32,
     pub warna_latar: u32,
+    pub latar_default: bool,
+    pub tersembunyi: bool,
 }
 
 fn warna_indeks(indeks: u8) -> u32 {
