@@ -2,11 +2,15 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / Tab manager
- * Purpose: Coordinates terminal tabs, pane layouts and independent session ownership
+ * Purpose : Coordinates terminal tabs, pane layouts and independent session ownership
  */
+
+use std::collections::HashMap;
 
 use super::manajer_sesi::{IdSesi, ManajerSesi};
 use super::susunan_panel::{ArahPanel, CabangPanel, SusunanPanel};
+
+pub const BATAS_NAMA_TAB: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct IdTab(IdSesi);
@@ -20,6 +24,7 @@ impl IdTab {
 pub struct ManajerTab<T> {
     tab: ManajerSesi<SusunanPanel>,
     sesi: ManajerSesi<T>,
+    nama_tab: HashMap<IdTab, String>,
 }
 
 impl<T> ManajerTab<T> {
@@ -27,6 +32,7 @@ impl<T> ManajerTab<T> {
         Self {
             tab: ManajerSesi::baru(),
             sesi: ManajerSesi::baru(),
+            nama_tab: HashMap::new(),
         }
     }
 
@@ -81,7 +87,36 @@ impl<T> ManajerTab<T> {
     pub fn tambah_tab(&mut self, isi: T) -> IdTab {
         let id_sesi = self.sesi.tambah(isi);
 
-        IdTab(self.tab.tambah(SusunanPanel::baru(id_sesi)))
+        let id = IdTab(self.tab.tambah(SusunanPanel::baru(id_sesi)));
+
+        self.nama_tab
+            .insert(id, format!("waifujahat {}", id.nilai()));
+
+        id
+    }
+
+    pub fn nama_tab(&self, id: IdTab) -> Option<&str> {
+        self.nama_tab.get(&id).map(String::as_str)
+    }
+
+    pub fn ubah_nama_tab(&mut self, id: IdTab, nama: &str) -> bool {
+        if nama.chars().any(char::is_control) {
+            return false;
+        }
+
+        let nama = nama.trim();
+
+        if nama.is_empty() || nama.chars().count() > BATAS_NAMA_TAB {
+            return false;
+        }
+
+        let Some(nama_tab) = self.nama_tab.get_mut(&id) else {
+            return false;
+        };
+
+        *nama_tab = nama.to_owned();
+
+        true
     }
 
     pub fn pilih_tab(&mut self, id: IdTab) -> bool {
@@ -129,6 +164,8 @@ impl<T> ManajerTab<T> {
 
     pub fn tutup_tab(&mut self, id: IdTab) -> Option<Vec<T>> {
         let susunan = self.tab.tutup(id.0)?;
+
+        self.nama_tab.remove(&id);
 
         let sesi = susunan
             .daftar_id()

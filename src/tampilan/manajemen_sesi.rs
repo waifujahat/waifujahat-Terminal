@@ -9,11 +9,22 @@ use gpui::{Context, KeyDownEvent, Window};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-use waifujahat_terminal::terminal::{ArahPanel, IdSesi, IdTab};
+use waifujahat_terminal::terminal::{ArahPanel, IdSesi, IdTab, ProfilShell};
 
 impl JendelaTerminal {
     pub(super) fn tambah_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
-        let ruang = RuangSesi::baru();
+        let profil = ProfilShell::default_tersedia().unwrap_or_default();
+
+        self.tambah_sesi_dengan_profil(profil, jendela, konteks);
+    }
+
+    pub(super) fn tambah_sesi_dengan_profil(
+        &mut self,
+        profil: ProfilShell,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) {
+        let ruang = RuangSesi::baru_dengan_profil(profil);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;
@@ -38,7 +49,9 @@ impl JendelaTerminal {
             return;
         }
 
-        let ruang = RuangSesi::baru();
+        let profil = self.ruang().profil;
+
+        let ruang = RuangSesi::baru_dengan_profil(profil);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;

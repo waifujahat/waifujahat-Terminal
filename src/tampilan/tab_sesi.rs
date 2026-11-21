@@ -101,7 +101,7 @@ impl JendelaTerminal {
                         .id(format!("pilih-sesi-{}", id.nilai()))
                         .px_2()
                         .text_color(rgb(WARNA_TEKS))
-                        .child(format!("waifujahat {}", id.nilai()))
+                        .child(self.manajer.nama_tab(id).unwrap_or("Terminal").to_owned())
                         .on_mouse_down(
                             MouseButton::Left,
                             konteks.listener(move |terminal, _, jendela, konteks| {
@@ -111,6 +111,34 @@ impl JendelaTerminal {
                             }),
                         ),
                 );
+
+            tab = tab.child(
+                div()
+                    .id(format!("edit-nama-tab-{}", id.nilai()))
+                    .w(px(20.0))
+                    .h(px(22.0))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor(CursorStyle::PointingHand)
+                    .hover(|gaya| gaya.bg(rgb(WARNA_TAB_AKTIF)))
+                    .child(
+                        svg()
+                            .path("icons/edit.svg")
+                            .w(px(13.0))
+                            .h(px(13.0))
+                            .text_color(rgb(WARNA_AKSEN)),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        konteks.listener(move |terminal, _, jendela, konteks| {
+                            terminal.buka_edit_nama_tab(id, jendela, konteks);
+
+                            konteks.stop_propagation();
+                        }),
+                    ),
+            );
 
             if self.manajer.jumlah_tab() > 1 {
                 tab = tab.child(

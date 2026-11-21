@@ -5,6 +5,8 @@
  * Purpose: Edits local text input and cursor position.
  */
 
+use std::ops::Range;
+
 #[derive(Default)]
 pub struct MasukanTerminal {
     teks: String,
@@ -36,6 +38,26 @@ impl MasukanTerminal {
             .nth(posisi)
             .map(|(indeks, _)| indeks)
             .unwrap_or(self.teks.len())
+    }
+
+    pub fn teks_rentang(&self, rentang: Range<usize>) -> &str {
+        let awal = self.indeks_byte(rentang.start);
+        let akhir = self.indeks_byte(rentang.end);
+
+        self.teks.get(awal..akhir).unwrap_or("")
+    }
+
+    pub fn hapus_rentang(&mut self, rentang: Range<usize>) {
+        let awal = self.indeks_byte(rentang.start);
+        let akhir = self.indeks_byte(rentang.end);
+
+        if awal >= akhir {
+            return;
+        }
+
+        self.teks.replace_range(awal..akhir, "");
+
+        self.posisi = rentang.start.min(self.teks.chars().count());
     }
 
     pub fn sisipkan(&mut self, teks: &str) {
@@ -74,6 +96,10 @@ impl MasukanTerminal {
 
     pub fn pindah_kanan(&mut self) {
         self.posisi = (self.posisi + 1).min(self.teks.chars().count());
+    }
+
+    pub fn pindah_ke(&mut self, posisi: usize) {
+        self.posisi = posisi.min(self.teks.chars().count());
     }
 
     pub fn pindah_awal(&mut self) {

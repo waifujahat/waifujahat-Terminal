@@ -9,7 +9,9 @@ use std::time::Instant;
 
 use gpui::Context;
 
-use waifujahat_terminal::terminal::{PenandaShell, PesanTerminal, PosisiSeleksi, SesiTerminal};
+use waifujahat_terminal::terminal::{
+    PenandaShell, PesanTerminal, ProsesTerminal, SesiTerminal, cari_shell_turunan,
+};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
@@ -47,6 +49,37 @@ impl RuangSesi {
                 format!("Selesai dalam {:.2} detik", durasi.as_secs_f64())
             }
         };
+    }
+
+    fn perbarui_shell_turunan(&mut self, daftar: &[ProsesTerminal]) {
+        let id_proses = self.sesi.as_ref().and_then(SesiTerminal::id_proses);
+
+        let mut hasil = id_proses
+            .map(|id| cari_shell_turunan(id, daftar))
+            .unwrap_or_default();
+
+        hasil.sort_unstable_by_key(|proses| proses.id);
+
+        if self.shell_turunan == hasil {
+            return;
+        }
+
+        self.shell_turunan = hasil;
+
+        if std::env::var_os("WAIFUJAHAT_DEBUG_SHELL").is_some() {
+            eprintln!("[Shell Monitor] Parent PID : {id_proses:?}");
+
+            if self.shell_turunan.is_empty() {
+                eprintln!("[Shell Monitor] Tidak ada nested shell");
+            } else {
+                for proses in &self.shell_turunan {
+                    eprintln!(
+                        "[Shell Monitor] {} | PID : {} | Parent : {}",
+                        proses.nama_program, proses.id, proses.id_induk
+                    );
+                }
+            }
+        }
     }
 
     fn kirim_respons_terminal(&mut self) {
@@ -122,7 +155,7 @@ impl RuangSesi {
                 }
 
                 Some(PesanTerminal::Berakhir) => {
-                    self.status = "Sesi PowerShell telah berakhir".into();
+                    self.status = format!("Sesi {} telah berakhir", self.profil.nama());
                     self.sesi = None;
                     self.keadaan.siklus.akhiri_sesi();
 
@@ -142,19 +175,21 @@ impl RuangSesi {
                 .geser_riwayat(isize::from(self.arah_gulir_seleksi));
 
             if self.keadaan.motor.offset_riwayat() != offset_sebelum {
-                let indeks_awal = self.keadaan.motor.indeks_awal_tampilan();
-
                 let tinggi = self.keadaan.motor.ukuran().1;
 
                 let indeks_baris = if self.arah_gulir_seleksi > 0 {
-                    indeks_awal
+                    0
                 } else {
-                    indeks_awal + tinggi.saturating_sub(1)
+                    tinggi.saturating_sub(1)
                 };
 
-                self.keadaan
-                    .seleksi
-                    .perbarui(PosisiSeleksi::baru(indeks_baris, self.kolom_gulir_seleksi));
+                if let Some(posisi) = self
+                    .keadaan
+                    .motor
+                    .posisi_seleksi_grid(indeks_baris, self.kolom_gulir_seleksi)
+                {
+                    self.keadaan.seleksi.perbarui(posisi);
+                }
 
                 berubah = true;
             }
@@ -191,6 +226,24 @@ impl JendelaTerminal {
 
         let mut berubah = false;
 
+        let potret_shell = match self
+            .pemantau_shell
+            .as_ref()
+            .and_then(|pemantau| pemantau.ambil())
+        {
+            Some(Ok(daftar)) => Some(daftar),
+
+            Some(Err(kesalahan)) => {
+                if std::env::var_os("WAIFUJAHAT_DEBUG_SHELL").is_some() {
+                    eprintln!("Gagal memantau proses shell : {kesalahan}");
+                }
+
+                None
+            }
+
+            None => None,
+        };
+
         for (id, ruang) in self.manajer.iter_sesi_mut() {
             let ukuran_berubah =
                 panel_terlihat.contains(&id) && ruang.sesuaikan_ukuran_panel(lebar_karakter);
@@ -204,6 +257,10 @@ impl JendelaTerminal {
             let protokol_sebelum = ruang.keadaan.motor.protokol_keyboard();
 
             let keluaran_berubah = ruang.periksa_keluaran(mode_grid);
+
+            if let Some(daftar) = &potret_shell {
+                ruang.perbarui_shell_turunan(daftar);
+            }
 
             let protokol_berubah = protokol_sebelum != ruang.keadaan.motor.protokol_keyboard();
 

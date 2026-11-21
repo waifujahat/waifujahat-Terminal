@@ -211,7 +211,11 @@ impl Render for JendelaTerminal {
                     } else {
                         self.ruang().status.clone()
                     })
-                    .child(if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
+                    .child(if self.ruang().sesi.is_none() {
+                        "Sesi berakhir"
+                    } else if !self.ruang().profil.mendukung_integrasi_shell() {
+                        "Direct shell input"
+                    } else if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
                         "Tekan Y : Ya | N/Esc : Batal"
                     } else if self.ruang().keadaan.siklus.berjalan()
                         || self.ruang().keadaan.motor.layar_alternatif_aktif()
@@ -226,6 +230,10 @@ impl Render for JendelaTerminal {
 
         if let Some(posisi) = self.menu_split {
             halaman = halaman.child(self.buat_menu_split(posisi, jendela, konteks));
+        }
+
+        if self.edit_nama_tab.is_some() {
+            halaman = halaman.child(self.buat_edit_nama_tab(jendela, konteks));
         }
 
         if let Some(lapisan) = self.buat_lapisan_tarikan_panel(konteks) {

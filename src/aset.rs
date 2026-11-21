@@ -38,6 +38,7 @@ impl AssetSource for AsetAplikasi {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         let data: Option<&'static [u8]> = match path {
             "icons/search.svg" => Some(include_bytes!("../assets/icons/search.svg")),
+            "icons/edit.svg" => Some(include_bytes!("../assets/icons/edit.svg")),
             "images/demo.jpg" => Some(GAMBAR_LATAR),
 
             _ => None,
@@ -47,7 +48,7 @@ impl AssetSource for AsetAplikasi {
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let daftar = ["icons/search.svg", "images/demo.jpg"]
+        let daftar = ["icons/search.svg", "icons/edit.svg", "images/demo.jpg"]
             .into_iter()
             .filter(|nama| nama.starts_with(path))
             .map(SharedString::from)

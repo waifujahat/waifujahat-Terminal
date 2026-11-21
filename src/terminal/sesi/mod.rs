@@ -10,7 +10,11 @@ use std::thread;
 
 mod io;
 
-use super::{profil_shell::ProfilShell, tombol::TombolTerminal};
+use super::{
+    profil_shell::ProfilShell,
+    proses_shell::{ProsesTerminal, cari_shell_turunan, potret_proses},
+    tombol::TombolTerminal,
+};
 
 use io::{jalankan_pembaca, jalankan_penulis};
 
@@ -34,7 +38,10 @@ pub struct SesiTerminal {
 
 impl SesiTerminal {
     pub fn baru() -> Result<Self> {
-        Self::baru_dengan_profil(ProfilShell::default())
+        let profil = ProfilShell::default_tersedia()
+            .ok_or_else(|| anyhow!("Tidak ada shell yang tersedia"))?;
+
+        Self::baru_dengan_profil(profil)
     }
 
     pub fn baru_dengan_profil(profil: ProfilShell) -> Result<Self> {
@@ -121,6 +128,19 @@ impl SesiTerminal {
 
     pub fn profil(&self) -> ProfilShell {
         self.profil
+    }
+    pub fn id_proses(&self) -> Option<u32> {
+        self.proses.process_id()
+    }
+
+    pub fn deteksi_shell_turunan(&self) -> Result<Vec<ProsesTerminal>> {
+        let Some(akar) = self.id_proses() else {
+            return Ok(Vec::new());
+        };
+
+        let daftar = potret_proses()?;
+
+        Ok(cari_shell_turunan(akar, &daftar))
     }
     pub fn kirim(&self, masukan: &str) -> Result<()> {
         self.kirim_bytes(masukan.as_bytes())
