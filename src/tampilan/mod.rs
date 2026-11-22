@@ -23,8 +23,9 @@ mod render_grid;
 mod render_panel;
 mod ruang_sesi;
 mod tab_sesi;
+mod workspace;
 
-use std::time::Duration;
+use std::{cell::RefCell, sync::Arc, time::Duration};
 
 use gpui::{
     Context, FocusHandle, KeyDownEvent, KeyUpEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -46,11 +47,17 @@ use keyboard_win32::{PengamatKeyboardWin32, kode_virtual_keyboard};
 
 use edit_nama_tab::EditNamaTab;
 
-use waifujahat_terminal::konfigurasi::PengaturanTerminal;
+use waifujahat_terminal::konfigurasi::{PengaturanTerminal, PenyimpanWorkspace};
+
+use workspace::AutosaveWorkspace;
 
 pub(crate) struct PengaturanAplikasi(pub(crate) PengaturanTerminal);
 
 impl gpui::Global for PengaturanAplikasi {}
+
+pub(crate) struct WorkspaceAplikasi(pub(crate) RefCell<Option<PenyimpanWorkspace>>);
+
+impl gpui::Global for WorkspaceAplikasi {}
 
 pub(crate) struct JendelaTerminal {
     fokus: FocusHandle,
@@ -67,6 +74,8 @@ pub(crate) struct JendelaTerminal {
     pemantau_shell: Option<PemantauProsesShell>,
     edit_nama_tab: Option<EditNamaTab>,
     pengaturan: PengaturanTerminal,
+    penyimpan_workspace: Option<Arc<AutosaveWorkspace>>,
+    _tugas_workspace: Option<Task<()>>,
 }
 
 impl JendelaTerminal {
@@ -79,22 +88,20 @@ impl JendelaTerminal {
             .try_global::<PengaturanAplikasi>()
             .map(|global| global.0.clone());
 
-        let mut manajer = ManajerTab::baru();
+        let penyimpan = konteks
+            .try_global::<WorkspaceAplikasi>()
+            .and_then(|global| global.0.borrow_mut().take());
 
-        let ruang = match pengaturan.as_ref() {
-            Some(pengaturan) => {
-                let profil = pengaturan
-                    .shell_default
-                    .profil_tersedia()
-                    .unwrap_or_default();
+        let (mut manajer, aman_disimpan) = Self::siapkan_manajer(
+            pengaturan.as_ref(),
+            penyimpan.as_ref().and_then(PenyimpanWorkspace::terakhir),
+        );
 
-                RuangSesi::baru_dengan_pengaturan(profil, pengaturan)
-            }
-
-            None => RuangSesi::baru(),
+        let penyimpan_workspace = if aman_disimpan {
+            penyimpan.map(AutosaveWorkspace::baru).map(Arc::new)
+        } else {
+            None
         };
-
-        manajer.tambah_tab(ruang);
 
         #[cfg(windows)]
         let pengamat_keyboard_win32 = match PengamatKeyboardWin32::pasang(jendela) {
@@ -140,6 +147,48 @@ impl JendelaTerminal {
             }
         });
 
+        let tugas_workspace = penyimpan_workspace.as_ref().map(|penyimpan| {
+            let penyimpan = Arc::clone(penyimpan);
+
+            konteks.spawn(async move |terminal, konteks| {
+                loop {
+                    konteks
+                        .background_executor()
+                        .timer(Duration::from_secs(2))
+                        .await;
+
+                    let snapshot = match terminal.update(konteks, |terminal, _| {
+                        Self::snapshot_workspace(&terminal.manajer)
+                    }) {
+                        Ok(snapshot) => snapshot,
+
+                        Err(_) => break,
+                    };
+
+                    let penyimpan = Arc::clone(&penyimpan);
+
+                    konteks
+                        .background_executor()
+                        .spawn(async move {
+                            penyimpan.simpan(snapshot, false);
+                        })
+                        .await;
+                }
+            })
+        });
+
+        if penyimpan_workspace.is_some() {
+            let terminal = konteks.weak_entity();
+
+            jendela.on_window_should_close(konteks, move |_, aplikasi| {
+                let _ = terminal.update(aplikasi, |terminal, _| {
+                    terminal.simpan_workspace_akhir();
+                });
+
+                true
+            });
+        }
+
         let pemantau_shell = match PemantauProsesShell::baru() {
             Ok(pemantau) => Some(pemantau),
 
@@ -167,6 +216,8 @@ impl JendelaTerminal {
             pemantau_shell,
             edit_nama_tab: None,
             pengaturan: pengaturan.unwrap_or_default(),
+            penyimpan_workspace,
+            _tugas_workspace: tugas_workspace,
         };
 
         terminal.sesuaikan_ukuran(jendela, konteks);

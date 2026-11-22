@@ -7,6 +7,8 @@
 
 use std::time::Instant;
 
+use std::path::{Path, PathBuf};
+
 use gpui::ScrollHandle;
 
 use waifujahat_terminal::terminal::{
@@ -38,6 +40,7 @@ pub(super) struct RuangSesi {
     pub(super) tombol_win32_ditekan: HashMap<String, RekamanTombolWin32>,
     pub(super) shell_turunan: Vec<ProsesTerminal>,
     pub(super) pengaturan: PengaturanTerminal,
+    direktori_awal: Option<PathBuf>,
 }
 
 impl RuangSesi {
@@ -55,6 +58,14 @@ impl RuangSesi {
         profil: ProfilShell,
         pengaturan: &PengaturanTerminal,
     ) -> Self {
+        Self::baru_dengan_direktori(profil, pengaturan, None)
+    }
+
+    pub(super) fn baru_dengan_direktori(
+        profil: ProfilShell,
+        pengaturan: &PengaturanTerminal,
+        direktori: Option<&Path>,
+    ) -> Self {
         let mut keadaan = KeadaanSesi::baru_dengan_pengaturan(
             80,
             24,
@@ -62,7 +73,7 @@ impl RuangSesi {
             pengaturan.batas_riwayat,
         );
 
-        let (sesi, status) = match SesiTerminal::baru_dengan_profil(profil) {
+        let (sesi, status) = match SesiTerminal::baru_dengan_direktori(profil, direktori) {
             Ok(sesi) => (Some(sesi), String::new()),
 
             Err(kesalahan) => {
@@ -75,7 +86,13 @@ impl RuangSesi {
             }
         };
 
+        let direktori_awal = sesi
+            .as_ref()
+            .and_then(SesiTerminal::direktori_awal)
+            .map(Path::to_path_buf);
+
         Self {
+            direktori_awal,
             pengaturan: pengaturan.clone(),
             profil,
             keadaan,
@@ -93,5 +110,10 @@ impl RuangSesi {
             tombol_win32_ditekan: HashMap::new(),
             shell_turunan: Vec::new(),
         }
+    }
+    pub(super) fn direktori_workspace(&self) -> Option<&Path> {
+        self.keadaan
+            .direktori_terakhir()
+            .or(self.direktori_awal.as_deref())
     }
 }

@@ -10,6 +10,8 @@ use super::{
     SiklusPerintah,
 };
 
+use std::path::Path;
+
 pub struct KeadaanSesi {
     pub layar: LayarTerminal,
     pub motor: MotorTerminal,
@@ -60,6 +62,10 @@ impl KeadaanSesi {
 
     pub fn integrasi_shell_aktif(&self) -> bool {
         self.integrasi_shell_aktif
+    }
+
+    pub fn direktori_terakhir(&self) -> Option<&Path> {
+        self.integrasi_shell.direktori_terakhir()
     }
 
     pub fn perintah_selesai_dari_prompt(&self) -> bool {

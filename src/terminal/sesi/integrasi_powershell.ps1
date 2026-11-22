@@ -70,8 +70,34 @@ function global:prompt {
         }
     }
 
-    $global:WaifujahatRiwayatTerakhir = $indeks
-    $global:WaifujahatKesalahanTerakhir = $kesalahanTerbaru
+$global:WaifujahatRiwayatTerakhir = $indeks
+$global:WaifujahatKesalahanTerakhir = $kesalahanTerbaru
+
+try {
+    $lokasi = $ExecutionContext.SessionState.Path.CurrentLocation
+
+    if ($lokasi.Provider.Name -eq 'FileSystem') {
+        $jalur = $lokasi.ProviderPath
+
+        if ($jalur -match '^[A-Za-z]:\\') {
+            $drive = $jalur.Substring(0, 2)
+
+            $bagianUri = foreach ($bagian in $jalur.Substring(3).Split([char]'\')) {
+                [Uri]::EscapeDataString($bagian)
+            }
+
+            $uri = 'file:///{0}/{1}' -f $drive, ($bagianUri -join '/')
+
+            [Console]::Write(
+                ('{0}]7;{1}{2}' -f $escape, $uri, $bell)
+            )
+        }
+    }
+}
+    catch {
+        # Directory reporting must not interrupt the shell prompt.
+        $global:WaifujahatKesalahanTerakhir = $Error[0]
+    }
 
     [Console]::Write(
         ('{0}]133;A{1}' -f $escape, $bell)

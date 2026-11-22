@@ -7,9 +7,12 @@
 
 use super::manajer_sesi::IdSesi;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ArahPanel {
+    #[serde(rename = "horizontal")]
     Horizontal,
+
+    #[serde(rename = "vertical")]
     Vertikal,
 }
 
@@ -148,6 +151,10 @@ impl SusunanPanel {
             akar: SimpulPanel::Tunggal(id),
             aktif: id,
         }
+    }
+
+    pub(crate) fn rasio_valid(rasio: u16) -> bool {
+        (RASIO_PANEL_MINIMUM..=RASIO_PANEL_MAKSIMUM).contains(&rasio)
     }
 
     pub fn hitung_rasio_tarikan(rasio_awal: u16, pergeseran: f32, panjang: f32) -> Option<u16> {
