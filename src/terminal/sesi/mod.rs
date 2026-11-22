@@ -5,6 +5,7 @@
  * Purpose: Owns the PowerShell process, PTY, resizing, and worker lifetime.
  */
 
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -30,6 +31,7 @@ pub enum PesanTerminal {
 
 pub struct SesiTerminal {
     profil: ProfilShell,
+    direktori_awal: Option<PathBuf>,
     master: Box<dyn MasterPty + Send>,
     proses: Box<dyn Child + Send + Sync>,
     pengirim_masukan: Sender<Vec<u8>>,
@@ -45,6 +47,10 @@ impl SesiTerminal {
     }
 
     pub fn baru_dengan_profil(profil: ProfilShell) -> Result<Self> {
+        Self::baru_dengan_direktori(profil, None)
+    }
+
+    pub fn baru_dengan_direktori(profil: ProfilShell, direktori: Option<&Path>) -> Result<Self> {
         let program = profil
             .lokasi_program()
             .ok_or_else(|| anyhow!("Shell {} tidak tersedia", profil.nama()))?;
@@ -61,6 +67,18 @@ impl SesiTerminal {
             .context("Gagal membuat pseudoterminal")?;
 
         let mut perintah = CommandBuilder::new(program);
+
+        let direktori_awal = direktori
+            .filter(|jalur| Self::direktori_awal_valid(jalur))
+            .map(Path::to_path_buf);
+
+        if let Some(jalur) = direktori_awal.as_deref() {
+            perintah.cwd(jalur);
+
+            if profil == ProfilShell::GitBash {
+                perintah.env("CHERE_INVOKING", "1");
+            }
+        }
 
         match profil {
             ProfilShell::WindowsPowerShell | ProfilShell::PowerShell7 => {
@@ -119,11 +137,39 @@ impl SesiTerminal {
 
         Ok(Self {
             profil,
+            direktori_awal,
             master: pasangan.master,
             proses,
             pengirim_masukan,
             penerima_peristiwa,
         })
+    }
+
+    fn direktori_awal_valid(direktori: &Path) -> bool {
+        if !direktori.is_absolute() {
+            return false;
+        }
+
+        #[cfg(windows)]
+        {
+            use std::path::{Component, Prefix};
+
+            let drive_valid = matches!(
+                direktori.components().next(),
+                Some(Component::Prefix(awalan))
+                    if matches!(awalan.kind(), Prefix::Disk(_))
+            );
+
+            if !drive_valid {
+                return false;
+            }
+        }
+
+        direktori.is_dir()
+    }
+
+    pub fn direktori_awal(&self) -> Option<&Path> {
+        self.direktori_awal.as_deref()
     }
 
     pub fn profil(&self) -> ProfilShell {

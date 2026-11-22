@@ -10,11 +10,15 @@ mod cli;
 mod tampilan;
 mod tema;
 
+use std::cell::RefCell;
+
 use gpui::{App, AppContext, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 
-use crate::tampilan::{JendelaTerminal, PengaturanAplikasi};
+use crate::tampilan::{JendelaTerminal, PengaturanAplikasi, WorkspaceAplikasi};
 
-use waifujahat_terminal::konfigurasi::{PengaturanTerminal, PenyimpananPengaturan};
+use waifujahat_terminal::konfigurasi::{
+    PengaturanTerminal, PenyimpanWorkspace, PenyimpananPengaturan, PenyimpananRuangKerja,
+};
 
 fn main() {
     match cli::jalankan_argumen() {
@@ -30,6 +34,8 @@ fn main() {
     }
 
     let pengaturan = muat_pengaturan();
+
+    let workspace = muat_workspace();
 
     gpui_platform::application()
         .with_assets(aset::AsetAplikasi)
@@ -55,6 +61,10 @@ fn main() {
 
             aplikasi.set_global(PengaturanAplikasi(pengaturan));
 
+            if let Some(penyimpan) = workspace {
+                aplikasi.set_global(WorkspaceAplikasi(RefCell::new(Some(penyimpan))));
+            }
+
             aplikasi
                 .open_window(pengaturan_jendela, |jendela, konteks| {
                     konteks.new(|konteks| JendelaTerminal::baru(jendela, konteks))
@@ -76,6 +86,22 @@ fn muat_pengaturan() -> PengaturanTerminal {
             eprintln!("Menggunakan konfigurasi default");
 
             PengaturanTerminal::default()
+        }
+    }
+}
+
+fn muat_workspace() -> Option<PenyimpanWorkspace> {
+    let hasil = PenyimpananRuangKerja::bawaan().and_then(PenyimpanWorkspace::baru);
+
+    match hasil {
+        Ok(penyimpan) => Some(penyimpan),
+
+        Err(kesalahan) => {
+            eprintln!("Gagal memuat workspace : {kesalahan:#}");
+
+            eprintln!("Workspace autosave dinonaktifkan");
+
+            None
         }
     }
 }

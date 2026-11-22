@@ -106,6 +106,17 @@ impl Default for PengaturanTerminal {
     }
 }
 
+impl From<ProfilShell> for PilihanShell {
+    fn from(profil: ProfilShell) -> Self {
+        match profil {
+            ProfilShell::WindowsPowerShell => Self::WindowsPowerShell,
+            ProfilShell::PowerShell7 => Self::PowerShell7,
+            ProfilShell::Cmd => Self::Cmd,
+            ProfilShell::GitBash => Self::GitBash,
+        }
+    }
+}
+
 impl PengaturanTerminal {
     pub const UKURAN_FONT_DEFAULT: f32 = 14.0;
     pub const TINGGI_BARIS_DEFAULT: f32 = 18.0;
