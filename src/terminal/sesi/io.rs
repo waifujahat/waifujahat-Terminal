@@ -5,7 +5,7 @@
  * Purpose: Manages PTY reader and writer loops.
  */
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 
 use super::PesanTerminal;
@@ -34,7 +34,17 @@ pub(super) fn jalankan_pembaca(mut pembaca: Box<dyn Read + Send>, pengirim: Send
     loop {
         let jumlah = match pembaca.read(&mut buffer) {
             Ok(0) => break,
+
             Ok(jumlah) => jumlah,
+
+            Err(kesalahan) if kesalahan.kind() == ErrorKind::Interrupted => {
+                continue;
+            }
+
+            Err(kesalahan) if kesalahan.kind() == ErrorKind::BrokenPipe => {
+                break;
+            }
+
             Err(kesalahan) => {
                 let _ = pengirim.send(PesanTerminal::Kesalahan(format!(
                     "Gagal membaca terminal: {kesalahan}"

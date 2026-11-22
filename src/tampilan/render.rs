@@ -282,7 +282,9 @@ impl Render for JendelaTerminal {
                     })
                     .child(if self.ruang().sesi.is_none() {
                         "Sesi berakhir"
-                    } else if !self.ruang().profil.mendukung_integrasi_shell() {
+                    } else if self.ruang().profil_lokal().is_none() {
+                        "SSH session"
+                    } else if !self.ruang().mendukung_integrasi_shell() {
                         "Direct shell input"
                     } else if self.ruang().keadaan.siklus.menunggu_konfirmasi() {
                         "Tekan Y : Ya | N/Esc : Batal"
@@ -299,6 +301,10 @@ impl Render for JendelaTerminal {
 
         if let Some(posisi) = self.menu_split {
             halaman = halaman.child(self.buat_menu_split(posisi, jendela, konteks));
+        }
+
+        if let Some(menu) = &self.menu_profil {
+            halaman = halaman.child(self.buat_menu_profil(menu, jendela, konteks));
         }
 
         if self.edit_nama_tab.is_some() {

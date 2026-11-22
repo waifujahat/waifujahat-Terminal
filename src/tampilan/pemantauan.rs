@@ -5,15 +5,18 @@
  * Purpose: Polls isolated PTY sessions and processes terminal output
  */
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gpui::Context;
 
 use waifujahat_terminal::terminal::{
-    PenandaShell, PesanTerminal, ProsesTerminal, SesiTerminal, cari_shell_turunan,
+    PenandaShell, PesanTerminal, ProsesTerminal, SesiTerminal, StatusProsesTerminal,
+    cari_shell_turunan,
 };
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
+
+const BATAS_PENUTUPAN_SSH: Duration = Duration::from_secs(5);
 
 impl RuangSesi {
     fn selesaikan_perintah(&mut self, kode_keluar: Option<i32>) {
@@ -52,6 +55,11 @@ impl RuangSesi {
     }
 
     fn perbarui_shell_turunan(&mut self, daftar: &[ProsesTerminal]) {
+        if self.profil_lokal().is_none() {
+            self.shell_turunan.clear();
+            return;
+        }
+
         let id_proses = self.sesi.as_ref().and_then(SesiTerminal::id_proses);
 
         let mut hasil = id_proses
@@ -94,6 +102,83 @@ impl RuangSesi {
         }
     }
 
+    fn periksa_penutupan_ssh(&mut self) -> bool {
+        if self.profil_lokal().is_some() {
+            return false;
+        }
+
+        let Some(sesi) = &mut self.sesi else {
+            return false;
+        };
+
+        let sekarang = Instant::now();
+
+        match sesi.status_proses() {
+            Ok(StatusProsesTerminal::Berjalan) => {}
+
+            Ok(StatusProsesTerminal::Berakhir { kode_keluar }) => {
+                if self.penutupan_ssh.kode_keluar.is_none() {
+                    self.penutupan_ssh.kode_keluar = Some(kode_keluar);
+
+                    self.penutupan_ssh.batas = Some(sekarang + BATAS_PENUTUPAN_SSH);
+
+                    if let Err(kesalahan) = sesi.tutup_pty_setelah_proses_berakhir() {
+                        self.penutupan_ssh.kesalahan = Some(format!("{kesalahan:#}"));
+                    }
+                }
+            }
+
+            Err(kesalahan) => {
+                self.penutupan_ssh
+                    .kesalahan
+                    .get_or_insert_with(|| format!("{kesalahan:#}"));
+
+                self.penutupan_ssh
+                    .batas
+                    .get_or_insert(sekarang + BATAS_PENUTUPAN_SSH);
+            }
+        }
+
+        let selesai =
+            self.penutupan_ssh.kode_keluar.is_some() && self.penutupan_ssh.pembaca_berakhir;
+
+        let kedaluwarsa = self
+            .penutupan_ssh
+            .batas
+            .is_some_and(|batas| sekarang >= batas);
+
+        if !selesai && !kedaluwarsa {
+            return false;
+        }
+
+        self.status = match self.penutupan_ssh.kode_keluar {
+            Some(0) => "Sesi SSH telah berakhir | Exit code: 0".to_owned(),
+
+            Some(kode) => {
+                format!("Sesi SSH telah berakhir | Exit code: {kode}")
+            }
+
+            None => "Koneksi SSH terputus | Exit code tidak tersedia".to_owned(),
+        };
+
+        if !self.penutupan_ssh.pembaca_berakhir {
+            self.status.push_str(" | Pembacaan PTY belum selesai");
+        }
+
+        if let Some(kesalahan) = &self.penutupan_ssh.kesalahan {
+            self.status.push_str(" | ");
+            self.status.push_str(kesalahan);
+        }
+
+        self.sesi = None;
+        self.keadaan.siklus.akhiri_sesi();
+        self.mouse_tui_ditekan = None;
+        self.arah_gulir_seleksi = 0;
+        self.batas_status_salin = None;
+
+        true
+    }
+
     pub(super) fn periksa_keluaran(&mut self, mode_grid: bool) -> bool {
         let mut berubah = false;
 
@@ -119,6 +204,9 @@ impl RuangSesi {
 
             match pesan {
                 Some(PesanTerminal::Keluaran(buffer)) => {
+                    if self.penutupan_ssh.batas.is_some() {
+                        self.penutupan_ssh.batas = Some(Instant::now() + BATAS_PENUTUPAN_SSH);
+                    }
                     let layar_alternatif_sebelum = self.keadaan.motor.layar_alternatif_aktif();
 
                     let penanda_shell = self.keadaan.terima(&buffer);
@@ -146,6 +234,16 @@ impl RuangSesi {
                 }
 
                 Some(PesanTerminal::Kesalahan(pesan)) => {
+                    if self.profil_lokal().is_none() {
+                        self.penutupan_ssh.kesalahan.get_or_insert(pesan);
+
+                        self.penutupan_ssh
+                            .batas
+                            .get_or_insert(Instant::now() + BATAS_PENUTUPAN_SSH);
+
+                        continue;
+                    }
+
                     self.status = pesan;
                     self.sesi = None;
                     self.keadaan.siklus.akhiri_sesi();
@@ -155,7 +253,18 @@ impl RuangSesi {
                 }
 
                 Some(PesanTerminal::Berakhir) => {
-                    self.status = format!("Sesi {} telah berakhir", self.profil.nama());
+                    if self.profil_lokal().is_none() {
+                        self.penutupan_ssh.pembaca_berakhir = true;
+
+                        self.penutupan_ssh
+                            .batas
+                            .get_or_insert(Instant::now() + BATAS_PENUTUPAN_SSH);
+
+                        break;
+                    }
+
+                    self.status = format!("Sesi {} telah berakhir", self.jenis.nama());
+
                     self.sesi = None;
                     self.keadaan.siklus.akhiri_sesi();
 
@@ -165,6 +274,10 @@ impl RuangSesi {
 
                 None => break,
             }
+        }
+
+        if self.periksa_penutupan_ssh() {
+            berubah = true;
         }
 
         if mode_grid && self.keadaan.seleksi.sedang_memilih() && self.arah_gulir_seleksi != 0 {

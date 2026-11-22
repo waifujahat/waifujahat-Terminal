@@ -14,6 +14,7 @@ mod keyboard_kitty;
 #[cfg(windows)]
 mod keyboard_win32;
 mod manajemen_sesi;
+mod menu_profil;
 mod menu_split;
 mod pemantauan;
 mod pencarian_terminal;
@@ -68,6 +69,7 @@ pub(crate) struct JendelaTerminal {
     _pengamat_aktivasi: Subscription,
     _tugas_pantau: Task<()>,
     menu_split: Option<gpui::Pixels>,
+    menu_profil: Option<menu_profil::MenuProfil>,
     tarikan_panel: Option<TarikanPanel>,
     #[cfg(windows)]
     pengamat_keyboard_win32: Option<PengamatKeyboardWin32>,
@@ -210,6 +212,7 @@ impl JendelaTerminal {
             _pengamat_aktivasi: pengamat_aktivasi,
             _tugas_pantau: tugas_pantau,
             menu_split: None,
+            menu_profil: None,
             tarikan_panel: None,
             #[cfg(windows)]
             pengamat_keyboard_win32,
@@ -420,9 +423,10 @@ impl JendelaTerminal {
             return;
         }
 
-        if self.menu_split.is_some() {
+        if self.menu_split.is_some() || self.menu_profil.is_some() {
             if kejadian.keystroke.key.eq_ignore_ascii_case("escape") {
                 self.menu_split = None;
+                self.menu_profil = None;
 
                 konteks.notify();
             }

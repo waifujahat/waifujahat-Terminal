@@ -9,17 +9,56 @@ use gpui::{Context, KeyDownEvent, Window};
 
 use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
-use waifujahat_terminal::terminal::{ArahPanel, IdSesi, IdTab, ProfilShell};
+use waifujahat_terminal::{
+    konfigurasi::{PengaturanTerminal, PenyimpananSsh},
+    terminal::{ArahPanel, IdSesi, IdTab, JenisSesiTerminal, ProfilShell, ProfilSsh},
+};
 
 impl JendelaTerminal {
+    pub(super) fn muat_profil_ssh_default(
+        pengaturan: &PengaturanTerminal,
+    ) -> anyhow::Result<Option<ProfilSsh>> {
+        let Some(id) = &pengaturan.ssh_default else {
+            return Ok(None);
+        };
+
+        let daftar = PenyimpananSsh::bawaan()?.muat()?.unwrap_or_default();
+
+        let profil = pengaturan
+            .profil_ssh_default(&daftar)
+            .ok_or_else(|| anyhow::anyhow!("Profil SSH default tidak ditemukan : {id}"))?;
+
+        Ok(Some(profil.clone()))
+    }
+
     pub(super) fn tambah_sesi(&mut self, jendela: &mut Window, konteks: &mut Context<Self>) {
+        let kesalahan = match Self::muat_profil_ssh_default(&self.pengaturan) {
+            Ok(Some(profil)) => {
+                if self.tambah_sesi_dengan_jenis(JenisSesiTerminal::Ssh(profil), jendela, konteks) {
+                    return;
+                }
+
+                Some(self.ruang().status.clone())
+            }
+
+            Ok(None) => None,
+
+            Err(kesalahan) => Some(format!("{kesalahan:#}")),
+        };
+
         let profil = self
             .pengaturan
             .shell_default
             .profil_tersedia()
             .unwrap_or_default();
 
-        self.tambah_sesi_dengan_profil(profil, jendela, konteks);
+        if self.tambah_sesi_dengan_profil(profil, jendela, konteks)
+            && let Some(pesan) = kesalahan
+        {
+            self.ruang_mut().status = format!("Menggunakan shell lokal | {pesan}");
+
+            konteks.notify();
+        }
     }
 
     pub(super) fn tambah_sesi_dengan_profil(
@@ -27,20 +66,43 @@ impl JendelaTerminal {
         profil: ProfilShell,
         jendela: &mut Window,
         konteks: &mut Context<Self>,
-    ) {
-        let ruang = RuangSesi::baru_dengan_pengaturan(profil, &self.pengaturan);
+    ) -> bool {
+        self.tambah_sesi_dengan_jenis(JenisSesiTerminal::Lokal(profil), jendela, konteks)
+    }
+
+    pub(super) fn tambah_sesi_dengan_jenis(
+        &mut self,
+        jenis: JenisSesiTerminal,
+        jendela: &mut Window,
+        konteks: &mut Context<Self>,
+    ) -> bool {
+        let nama_tab = match &jenis {
+            JenisSesiTerminal::Lokal(_) => None,
+
+            JenisSesiTerminal::Ssh(profil) => Some(profil.nama.clone()),
+        };
+
+        let ruang = RuangSesi::baru_dengan_jenis(jenis, &self.pengaturan, None);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;
 
             konteks.notify();
-            return;
+
+            return false;
         }
 
-        self.manajer.tambah_tab(ruang);
+        let id_tab = self.manajer.tambah_tab(ruang);
+
+        if let Some(nama) = nama_tab {
+            self.manajer.ubah_nama_tab(id_tab, &nama);
+        }
 
         jendela.focus(&self.fokus, konteks);
+
         konteks.notify();
+
+        true
     }
 
     pub(super) fn pecah_panel(
@@ -53,9 +115,9 @@ impl JendelaTerminal {
             return;
         }
 
-        let profil = self.ruang().profil;
+        let jenis = self.ruang().jenis.clone();
 
-        let ruang = RuangSesi::baru_dengan_pengaturan(profil, &self.pengaturan);
+        let ruang = RuangSesi::baru_dengan_jenis(jenis, &self.pengaturan, None);
 
         if ruang.sesi.is_none() {
             self.ruang_mut().status = ruang.status;
@@ -93,9 +155,10 @@ impl JendelaTerminal {
         }
 
         let sesi_sibuk = self.manajer.ambil(id).is_some_and(|ruang| {
-            ruang.keadaan.siklus.berjalan()
-                || ruang.keadaan.motor.layar_alternatif_aktif()
-                || ruang.mouse_tui_ditekan.is_some()
+            ruang.sesi.is_some()
+                && (ruang.keadaan.siklus.berjalan()
+                    || ruang.keadaan.motor.layar_alternatif_aktif()
+                    || ruang.mouse_tui_ditekan.is_some())
         });
 
         if sesi_sibuk {
@@ -177,7 +240,9 @@ impl JendelaTerminal {
 
         let sesi_sibuk = daftar_id.iter().copied().any(|id_sesi| {
             self.manajer.ambil(id_sesi).is_some_and(|ruang| {
-                ruang.keadaan.siklus.berjalan() || ruang.keadaan.motor.layar_alternatif_aktif()
+                ruang.sesi.is_some()
+                    && (ruang.keadaan.siklus.berjalan()
+                        || ruang.keadaan.motor.layar_alternatif_aktif())
             })
         });
 

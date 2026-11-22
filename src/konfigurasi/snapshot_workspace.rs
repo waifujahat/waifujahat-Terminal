@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 
-use crate::terminal::{IdSesi, ManajerTab, ProfilShell, SimpulPanel};
+use crate::terminal::{IdSesi, JenisSesiTerminal, ManajerTab, ProfilShell, SimpulPanel};
 
 use super::{
     PanelRuangKerja, RuangKerja, TabRuangKerja,
@@ -20,6 +20,17 @@ impl RuangKerja {
     pub fn dari_manajer<T>(
         manajer: &ManajerTab<T>,
         mut ambil_informasi: impl FnMut(&T) -> (ProfilShell, Option<PathBuf>),
+    ) -> Result<Self> {
+        Self::dari_manajer_dengan_jenis(manajer, |sesi| {
+            let (profil, direktori) = ambil_informasi(sesi);
+
+            (JenisSesiTerminal::Lokal(profil), direktori)
+        })
+    }
+
+    pub fn dari_manajer_dengan_jenis<T>(
+        manajer: &ManajerTab<T>,
+        mut ambil_informasi: impl FnMut(&T) -> (JenisSesiTerminal, Option<PathBuf>),
     ) -> Result<Self> {
         ensure!(
             manajer.jumlah_tab() <= BATAS_JUMLAH_TAB,
@@ -80,7 +91,7 @@ fn snapshot_panel<T>(
     simpul: &SimpulPanel,
     id_aktif: IdSesi,
     kedalaman: usize,
-    ambil_informasi: &mut impl FnMut(&T) -> (ProfilShell, Option<PathBuf>),
+    ambil_informasi: &mut impl FnMut(&T) -> (JenisSesiTerminal, Option<PathBuf>),
 ) -> Result<(PanelRuangKerja, usize, Option<usize>)> {
     ensure!(
         kedalaman <= BATAS_KEDALAMAN_PANEL,
@@ -91,16 +102,20 @@ fn snapshot_panel<T>(
         SimpulPanel::Tunggal(id) => {
             let sesi = manajer.ambil(*id).context("Sesi panel tidak ditemukan")?;
 
-            let (profil, direktori) = ambil_informasi(sesi);
+            let (jenis, direktori) = ambil_informasi(sesi);
 
-            Ok((
-                PanelRuangKerja::Tunggal {
+            let panel = match jenis {
+                JenisSesiTerminal::Lokal(profil) => PanelRuangKerja::Tunggal {
                     shell: profil.into(),
                     direktori,
                 },
-                1,
-                (*id == id_aktif).then_some(0),
-            ))
+
+                JenisSesiTerminal::Ssh(profil) => PanelRuangKerja::Ssh {
+                    id_profil: profil.id,
+                },
+            };
+
+            Ok((panel, 1, (*id == id_aktif).then_some(0)))
         }
 
         SimpulPanel::Terbagi {

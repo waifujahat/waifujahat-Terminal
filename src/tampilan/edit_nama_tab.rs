@@ -533,3 +533,11 @@ impl JendelaTerminal {
             )
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/regresi_editor_nama_tab.rs"]
+mod regresi_editor_nama_tab;
+
+#[cfg(test)]
+#[path = "../../tests/unit/regresi_interaksi_nama_tab.rs"]
+mod regresi_interaksi_nama_tab;

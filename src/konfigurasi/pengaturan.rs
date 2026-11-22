@@ -9,7 +9,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::terminal::ProfilShell;
+use crate::terminal::{ProfilShell, ProfilSsh};
+
+use super::DaftarProfilSsh;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PilihanShell {
@@ -65,6 +67,15 @@ pub struct PengaturanTerminal {
     #[serde(rename = "default_shell")]
     pub shell_default: PilihanShell,
 
+    #[serde(
+        rename = "default_ssh_profile",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ssh_default: Option<String>,
+
+    #[serde(rename = "ssh_auto_connect")]
+    pub ssh_auto_connect: bool,
+
     #[serde(rename = "font_family")]
     pub keluarga_font: String,
 
@@ -102,6 +113,8 @@ impl Default for PengaturanTerminal {
             gambar_latar: None,
             batas_riwayat: None,
             konfirmasi_aktif: true,
+            ssh_default: None,
+            ssh_auto_connect: false,
         }
     }
 }
@@ -121,6 +134,10 @@ impl PengaturanTerminal {
     pub const UKURAN_FONT_DEFAULT: f32 = 14.0;
     pub const TINGGI_BARIS_DEFAULT: f32 = 18.0;
     pub const ALFA_LATAR_DEFAULT: u8 = 0xb3;
+
+    pub fn profil_ssh_default<'a>(&self, daftar: &'a DaftarProfilSsh) -> Option<&'a ProfilSsh> {
+        daftar.cari(self.ssh_default.as_deref()?)
+    }
 
     pub fn ukuran_font_efektif(&self) -> f32 {
         self.ukuran_font.unwrap_or(Self::UKURAN_FONT_DEFAULT)
