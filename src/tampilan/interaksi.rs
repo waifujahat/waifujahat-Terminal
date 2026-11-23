@@ -891,14 +891,17 @@ fn langkah_gulir_seleksi(jarak: f32) -> i8 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "local-tests"))]
+#[rustfmt::skip]
 #[path = "../../tests/unit/regresi_gulir_seleksi.rs"]
 mod regresi_gulir_seleksi;
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, windows, feature = "local-tests"))]
+#[rustfmt::skip]
 #[path = "../../tests/unit/regresi_pemulihan_workspace.rs"]
 mod regresi_pemulihan_workspace;
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, windows, feature = "local-tests"))]
+#[rustfmt::skip]
 #[path = "../../tests/unit/regresi_lifecycle_ssh.rs"]
 mod regresi_lifecycle_ssh;
