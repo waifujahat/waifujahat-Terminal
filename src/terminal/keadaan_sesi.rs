@@ -2,15 +2,15 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / Session state
- * Purpose: Owns isolated terminal state for each session
+ * Purpose : Owns isolated state for local and remote terminal sessions
  */
+
+use std::path::Path;
 
 use super::{
     LayarTerminal, MotorTerminal, ParserIntegrasiShell, PenandaShell, SeleksiTerminal,
     SiklusPerintah,
 };
-
-use std::path::Path;
 
 pub struct KeadaanSesi {
     pub layar: LayarTerminal,
@@ -20,6 +20,7 @@ pub struct KeadaanSesi {
 
     integrasi_shell: ParserIntegrasiShell,
     integrasi_shell_aktif: bool,
+    integrasi_shell_diizinkan: bool,
 }
 
 impl KeadaanSesi {
@@ -33,6 +34,20 @@ impl KeadaanSesi {
         konfirmasi_aktif: bool,
         batas_riwayat: Option<usize>,
     ) -> Self {
+        Self::buat(kolom, baris, konfirmasi_aktif, batas_riwayat, true)
+    }
+
+    pub fn baru_untuk_ssh(kolom: usize, baris: usize, batas_riwayat: Option<usize>) -> Self {
+        Self::buat(kolom, baris, false, batas_riwayat, false)
+    }
+
+    fn buat(
+        kolom: usize,
+        baris: usize,
+        konfirmasi_aktif: bool,
+        batas_riwayat: Option<usize>,
+        integrasi_shell_diizinkan: bool,
+    ) -> Self {
         let mut layar = LayarTerminal::baru();
 
         layar.ubah_tinggi(baris);
@@ -44,12 +59,17 @@ impl KeadaanSesi {
             seleksi: SeleksiTerminal::baru(),
             integrasi_shell: ParserIntegrasiShell::baru(),
             integrasi_shell_aktif: false,
+            integrasi_shell_diizinkan,
         }
     }
 
     pub fn terima(&mut self, keluaran: &[u8]) -> Vec<PenandaShell> {
         self.layar.terima(keluaran);
         self.motor.terima(keluaran);
+
+        if !self.integrasi_shell_diizinkan {
+            return Vec::new();
+        }
 
         let penanda = self.integrasi_shell.terima(keluaran);
 
@@ -69,7 +89,8 @@ impl KeadaanSesi {
     }
 
     pub fn perintah_selesai_dari_prompt(&self) -> bool {
-        !self.integrasi_shell_aktif()
+        self.integrasi_shell_diizinkan
+            && !self.integrasi_shell_aktif()
             && self.siklus.berjalan()
             && !self.motor.layar_alternatif_aktif()
             && self.prompt_powershell_terlihat()

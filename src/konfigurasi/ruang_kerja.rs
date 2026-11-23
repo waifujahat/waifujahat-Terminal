@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::terminal::{ArahPanel, BATAS_NAMA_TAB, SusunanPanel};
+use crate::terminal::{ArahPanel, BATAS_NAMA_TAB, ProfilSsh, SusunanPanel};
 
 use super::PilihanShell;
 
@@ -60,6 +60,12 @@ pub enum PanelRuangKerja {
         direktori: Option<PathBuf>,
     },
 
+    #[serde(rename = "ssh")]
+    Ssh {
+        #[serde(rename = "profile_id")]
+        id_profil: String,
+    },
+
     #[serde(rename = "split")]
     Terbagi {
         #[serde(rename = "direction")]
@@ -78,6 +84,10 @@ pub enum PanelRuangKerja {
 
 impl RuangKerja {
     pub const VERSI: u32 = VERSI_RUANG_KERJA;
+
+    pub fn memiliki_ssh(&self) -> bool {
+        self.tab.iter().any(|tab| tab.susunan.memiliki_ssh())
+    }
 
     pub fn validasi(&self) -> Result<()> {
         ensure!(self.versi == Self::VERSI, "Versi workspace tidak didukung");
@@ -138,6 +148,16 @@ impl TabRuangKerja {
 }
 
 impl PanelRuangKerja {
+    fn memiliki_ssh(&self) -> bool {
+        match self {
+            Self::Tunggal { .. } => false,
+
+            Self::Ssh { .. } => true,
+
+            Self::Terbagi { pertama, kedua, .. } => pertama.memiliki_ssh() || kedua.memiliki_ssh(),
+        }
+    }
+
     fn validasi(&self, kedalaman: usize, jumlah_panel: &mut usize) -> Result<()> {
         ensure!(
             kedalaman <= BATAS_KEDALAMAN_PANEL,
@@ -157,6 +177,20 @@ impl PanelRuangKerja {
                         "Working directory harus menggunakan jalur absolut"
                     );
                 }
+
+                *jumlah_panel += 1;
+
+                ensure!(
+                    *jumlah_panel <= BATAS_JUMLAH_PANEL,
+                    "Jumlah panel workspace melebihi batas"
+                );
+            }
+
+            Self::Ssh { id_profil } => {
+                ensure!(
+                    ProfilSsh::id_valid(id_profil),
+                    "Identitas profil SSH workspace tidak valid"
+                );
 
                 *jumlah_panel += 1;
 

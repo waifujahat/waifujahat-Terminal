@@ -24,6 +24,24 @@ const BATAS_SCROLLBACK: usize = 100_000;
 impl PengaturanTerminal {
     pub fn validasi(&self) -> Result<()> {
         ensure!(
+            !self.ssh_auto_connect || self.ssh_default.is_some(),
+            "ssh_auto_connect memerlukan default_ssh_profile"
+        );
+
+        if let Some(id) = &self.ssh_default {
+            ensure!(
+                !id.is_empty()
+                    && id.len() <= 64
+                    && id.bytes().all(|karakter| {
+                        karakter.is_ascii_lowercase()
+                            || karakter.is_ascii_digit()
+                            || matches!(karakter, b'-' | b'_')
+                    }),
+                "default_ssh_profile tidak valid"
+            );
+        }
+
+        ensure!(
             !self.keluarga_font.trim().is_empty(),
             "font_family tidak boleh kosong"
         );

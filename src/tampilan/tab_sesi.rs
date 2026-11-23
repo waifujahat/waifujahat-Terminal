@@ -185,6 +185,30 @@ impl JendelaTerminal {
 
         daftar = daftar.child(
             div()
+                .id("tombol-menu-profil")
+                .w(px(24.0))
+                .h(px(22.0))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgb(WARNA_TAB_NONAKTIF))
+                .text_color(rgb(WARNA_AKSEN))
+                .cursor(CursorStyle::PointingHand)
+                .hover(|gaya| gaya.bg(rgb(WARNA_TAB_AKTIF)))
+                .child("▾")
+                .on_mouse_down(
+                    MouseButton::Left,
+                    konteks.listener(|terminal, kejadian: &gpui::MouseDownEvent, _, konteks| {
+                        konteks.stop_propagation();
+
+                        terminal.ubah_menu_profil(kejadian.position.x, konteks);
+                    }),
+                ),
+        );
+
+        daftar = daftar.child(
+            div()
                 .id("tombol-menu-split")
                 .h(px(22.0))
                 .px_2()

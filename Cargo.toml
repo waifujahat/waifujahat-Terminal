@@ -9,6 +9,9 @@ license-file = "LICENSE"
 publish = false
 build = "build.rs"
 
+[features]
+local-tests = []
+
 [dependencies]
 anyhow = "1.0.104"
 gpui = { package = "gpui-pre", version = "=0.3.12" }
@@ -32,6 +35,9 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[dev-dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
 
 [build-dependencies]
 winresource = "0.1.34"

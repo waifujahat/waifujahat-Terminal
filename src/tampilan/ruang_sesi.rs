@@ -11,10 +11,6 @@ use std::path::{Path, PathBuf};
 
 use gpui::ScrollHandle;
 
-use waifujahat_terminal::terminal::{
-    KeadaanSesi, ProfilShell, ProsesTerminal, RekamanTombolWin32, SesiTerminal,
-};
-
 use super::pencarian_terminal::PencarianPanel;
 
 use std::collections::HashMap;
@@ -23,8 +19,21 @@ use super::keyboard_kitty::TombolKittyDitekan;
 
 use waifujahat_terminal::konfigurasi::PengaturanTerminal;
 
+use waifujahat_terminal::terminal::{
+    JenisSesiTerminal, KeadaanSesi, ProfilShell, ProsesTerminal, RekamanTombolWin32, SesiTerminal,
+};
+
+#[derive(Default)]
+pub(super) struct PenutupanSsh {
+    pub(super) kode_keluar: Option<u32>,
+    pub(super) pembaca_berakhir: bool,
+    pub(super) batas: Option<Instant>,
+    pub(super) kesalahan: Option<String>,
+}
+
 pub(super) struct RuangSesi {
-    pub(super) profil: ProfilShell,
+    pub(super) jenis: JenisSesiTerminal,
+    pub(super) penutupan_ssh: PenutupanSsh,
     pub(super) keadaan: KeadaanSesi,
     pub(super) sesi: Option<SesiTerminal>,
     pub(super) gulir: ScrollHandle,
@@ -50,6 +59,18 @@ impl RuangSesi {
         Self::baru_dengan_profil(profil)
     }
 
+    pub(super) fn profil_lokal(&self) -> Option<ProfilShell> {
+        match &self.jenis {
+            JenisSesiTerminal::Lokal(profil) => Some(*profil),
+            JenisSesiTerminal::Ssh(_) => None,
+        }
+    }
+
+    pub(super) fn mendukung_integrasi_shell(&self) -> bool {
+        self.profil_lokal()
+            .is_some_and(ProfilShell::mendukung_integrasi_shell)
+    }
+
     pub(super) fn baru_dengan_profil(profil: ProfilShell) -> Self {
         Self::baru_dengan_pengaturan(profil, &PengaturanTerminal::default())
     }
@@ -66,14 +87,44 @@ impl RuangSesi {
         pengaturan: &PengaturanTerminal,
         direktori: Option<&Path>,
     ) -> Self {
-        let mut keadaan = KeadaanSesi::baru_dengan_pengaturan(
-            80,
-            24,
-            pengaturan.konfirmasi_aktif,
-            pengaturan.batas_riwayat,
-        );
+        Self::baru_dengan_jenis(JenisSesiTerminal::Lokal(profil), pengaturan, direktori)
+    }
 
-        let (sesi, status) = match SesiTerminal::baru_dengan_direktori(profil, direktori) {
+    pub(super) fn baru_dengan_jenis(
+        jenis: JenisSesiTerminal,
+        pengaturan: &PengaturanTerminal,
+        direktori: Option<&Path>,
+    ) -> Self {
+        let hasil = match &jenis {
+            JenisSesiTerminal::Lokal(profil) => {
+                SesiTerminal::baru_dengan_direktori(*profil, direktori)
+            }
+
+            JenisSesiTerminal::Ssh(profil) => SesiTerminal::baru_dengan_ssh(profil),
+        };
+
+        Self::dari_hasil_sesi(jenis, pengaturan, hasil)
+    }
+
+    pub(super) fn dari_hasil_sesi(
+        jenis: JenisSesiTerminal,
+        pengaturan: &PengaturanTerminal,
+        hasil: anyhow::Result<SesiTerminal>,
+    ) -> Self {
+        let mut keadaan = match &jenis {
+            JenisSesiTerminal::Lokal(_) => KeadaanSesi::baru_dengan_pengaturan(
+                80,
+                24,
+                pengaturan.konfirmasi_aktif,
+                pengaturan.batas_riwayat,
+            ),
+
+            JenisSesiTerminal::Ssh(_) => {
+                KeadaanSesi::baru_untuk_ssh(80, 24, pengaturan.batas_riwayat)
+            }
+        };
+
+        let (sesi, status) = match hasil {
             Ok(sesi) => (Some(sesi), String::new()),
 
             Err(kesalahan) => {
@@ -81,7 +132,7 @@ impl RuangSesi {
 
                 (
                     None,
-                    format!("Gagal membuka {} : {kesalahan}", profil.nama()),
+                    format!("Gagal membuka {} : {kesalahan}", jenis.nama()),
                 )
             }
         };
@@ -94,7 +145,8 @@ impl RuangSesi {
         Self {
             direktori_awal,
             pengaturan: pengaturan.clone(),
-            profil,
+            jenis,
+            penutupan_ssh: PenutupanSsh::default(),
             keadaan,
             sesi,
             gulir: ScrollHandle::new(),
@@ -111,7 +163,10 @@ impl RuangSesi {
             shell_turunan: Vec::new(),
         }
     }
+
     pub(super) fn direktori_workspace(&self) -> Option<&Path> {
+        self.profil_lokal()?;
+
         self.keadaan
             .direktori_terakhir()
             .or(self.direktori_awal.as_deref())

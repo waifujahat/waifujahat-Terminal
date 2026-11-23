@@ -533,3 +533,13 @@ impl JendelaTerminal {
             )
     }
 }
+
+#[cfg(all(test, feature = "local-tests"))]
+#[rustfmt::skip]
+#[path = "../../tests/unit/regresi_editor_nama_tab.rs"]
+mod regresi_editor_nama_tab;
+
+#[cfg(all(test, feature = "local-tests"))]
+#[rustfmt::skip]
+#[path = "../../tests/unit/regresi_interaksi_nama_tab.rs"]
+mod regresi_interaksi_nama_tab;

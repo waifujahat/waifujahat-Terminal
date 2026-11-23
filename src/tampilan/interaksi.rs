@@ -347,7 +347,7 @@ impl RuangSesi {
     }
 
     pub(super) fn pindah_kursor_mouse(&mut self, posisi: PosisiSeleksi) {
-        if !self.profil.mendukung_integrasi_shell()
+        if !self.mendukung_integrasi_shell()
             || !self.mode_grid_aktif()
             || self.keadaan.siklus.berjalan()
             || self.keadaan.siklus.menunggu_konfirmasi()
@@ -460,7 +460,7 @@ impl RuangSesi {
     }
 
     fn hapus_seleksi_input(&mut self, tombol: TombolTerminal<'_>) -> bool {
-        if !self.profil.mendukung_integrasi_shell() || self.keadaan.seleksi.rentang().is_none() {
+        if !self.mendukung_integrasi_shell() || self.keadaan.seleksi.rentang().is_none() {
             return false;
         }
 
@@ -517,7 +517,7 @@ impl RuangSesi {
         let tombol = &kejadian.keystroke;
         let nama_tombol = tombol.key.to_ascii_lowercase();
 
-        let shell_siap = self.profil.mendukung_integrasi_shell()
+        let shell_siap = self.mendukung_integrasi_shell()
             && self.sesi.is_some()
             && (self.keadaan.siklus.siap() || self.keadaan.siklus.menunggu_konfirmasi())
             && !self.keadaan.motor.layar_alternatif_aktif();
@@ -890,3 +890,18 @@ fn langkah_gulir_seleksi(jarak: f32) -> i8 {
         12
     }
 }
+
+#[cfg(all(test, feature = "local-tests"))]
+#[rustfmt::skip]
+#[path = "../../tests/unit/regresi_gulir_seleksi.rs"]
+mod regresi_gulir_seleksi;
+
+#[cfg(all(test, windows, feature = "local-tests"))]
+#[rustfmt::skip]
+#[path = "../../tests/unit/regresi_pemulihan_workspace.rs"]
+mod regresi_pemulihan_workspace;
+
+#[cfg(all(test, windows, feature = "local-tests"))]
+#[rustfmt::skip]
+#[path = "../../tests/unit/regresi_lifecycle_ssh.rs"]
+mod regresi_lifecycle_ssh;
