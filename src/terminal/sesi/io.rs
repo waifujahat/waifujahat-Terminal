@@ -2,18 +2,20 @@
  * Waifujahat Terminal
  * Author : waifujahat
  * Module : Terminal / PTY I/O workers
- * Purpose: Manages PTY reader and writer loops.
+ * Purpose: Manages PTY reader and writer loops
  */
 
-use std::io::{ErrorKind, Read, Write};
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    io::{ErrorKind, Read, Write},
+    sync::mpsc::{Receiver, SyncSender},
+};
 
 use super::PesanTerminal;
 
 pub(super) fn jalankan_penulis(
     mut penulis: Box<dyn Write + Send>,
     penerima: Receiver<Vec<u8>>,
-    pengirim: Sender<PesanTerminal>,
+    pengirim: SyncSender<PesanTerminal>,
 ) {
     while let Ok(masukan) = penerima.recv() {
         let hasil = penulis.write_all(&masukan).and_then(|_| penulis.flush());
@@ -28,8 +30,13 @@ pub(super) fn jalankan_penulis(
     }
 }
 
-pub(super) fn jalankan_pembaca(mut pembaca: Box<dyn Read + Send>, pengirim: Sender<PesanTerminal>) {
-    let mut buffer = [0u8; 4096];
+pub(super) fn jalankan_pembaca(
+    mut pembaca: Box<dyn Read + Send>,
+    pengirim: SyncSender<PesanTerminal>,
+) {
+    const UKURAN_BUFFER: usize = 4096;
+
+    let mut buffer = [0u8; UKURAN_BUFFER];
 
     loop {
         let jumlah = match pembaca.read(&mut buffer) {

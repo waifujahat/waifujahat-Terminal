@@ -10,7 +10,6 @@ publish = false
 build = "build.rs"
 
 [features]
-local-tests = []
 
 [dependencies]
 anyhow = "1.0.104"

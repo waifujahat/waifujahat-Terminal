@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use gpui::Context;
 
+use waifujahat_terminal::terminal::HasilOutputArsip;
 use waifujahat_terminal::terminal::{
     PenandaShell, PesanTerminal, ProsesTerminal, SesiTerminal, StatusProsesTerminal,
     cari_shell_turunan,
@@ -179,6 +180,29 @@ impl RuangSesi {
         true
     }
 
+    fn proses_efek_keluaran(
+        &mut self,
+        layar_alternatif_sebelum: bool,
+        penanda_shell: Vec<PenandaShell>,
+    ) {
+        if layar_alternatif_sebelum != self.keadaan.motor.layar_alternatif_aktif() {
+            self.keadaan.seleksi.bersihkan();
+            self.arah_gulir_seleksi = 0;
+        }
+
+        for penanda in penanda_shell {
+            if let PenandaShell::PerintahSelesai(kode_keluar) = penanda {
+                self.selesaikan_perintah(kode_keluar);
+            }
+        }
+
+        if self.keadaan.perintah_selesai_dari_prompt() {
+            self.selesaikan_perintah(None);
+        }
+
+        self.kirim_respons_terminal();
+    }
+
     pub(super) fn periksa_keluaran(&mut self, mode_grid: bool) -> bool {
         let mut berubah = false;
 
@@ -199,36 +223,98 @@ impl RuangSesi {
             berubah = true;
         }
 
+        if self.profil_lokal().is_some()
+            && self.pengendali_arsip.is_some()
+            && let Some(sesi) = self.sesi.as_mut()
+        {
+            match sesi.status_proses() {
+                Ok(StatusProsesTerminal::Berakhir { .. }) => {
+                    if let Err(kesalahan) = sesi.tutup_pty_setelah_proses_berakhir() {
+                        self.status = format!("Gagal menutup PTY lokal: {kesalahan:#}");
+                        berubah = true;
+                    }
+                }
+                Ok(StatusProsesTerminal::Berjalan) => {}
+                Err(kesalahan) => {
+                    self.status = format!("Gagal memeriksa proses lokal: {kesalahan:#}");
+                    berubah = true;
+                }
+            }
+        }
         for _ in 0..64 {
-            let pesan = self.sesi.as_ref().and_then(SesiTerminal::try_ambil);
+            if let Some(pengendali) = self.pengendali_arsip.as_mut() {
+                let layar_sebelum = self.keadaan.motor.layar_alternatif_aktif();
+
+                match pengendali.langkah(&mut self.keadaan) {
+                    Ok(HasilOutputArsip::TidakAda) => {}
+
+                    Ok(HasilOutputArsip::MenungguArsip) => break,
+
+                    Ok(HasilOutputArsip::ArsipTersimpan(_)) => {
+                        berubah = true;
+                        continue;
+                    }
+
+                    Ok(HasilOutputArsip::OutputDiproses { penanda_shell, .. }) => {
+                        self.proses_efek_keluaran(layar_sebelum, penanda_shell);
+                        berubah = true;
+                        continue;
+                    }
+
+                    Ok(HasilOutputArsip::Dihentikan(pesan)) => {
+                        self.status = format!("Pengarsipan dihentikan: {pesan}");
+
+                        if let Err(kesalahan) = pengendali.aktifkan_mode_langsung() {
+                            self.status = format!("Gagal mengaktifkan fallback: {kesalahan}");
+                            berubah = true;
+                            break;
+                        }
+
+                        berubah = true;
+                        continue;
+                    }
+
+                    Err(kesalahan) => {
+                        self.status = format!("Gagal memproses aliran arsip: {kesalahan:#}");
+                        berubah = true;
+                        break;
+                    }
+                }
+            }
+
+            let pesan = self
+                .antrean_pesan
+                .ambil(|| self.sesi.as_ref().and_then(SesiTerminal::try_ambil));
 
             match pesan {
                 Some(PesanTerminal::Keluaran(buffer)) => {
                     if self.penutupan_ssh.batas.is_some() {
                         self.penutupan_ssh.batas = Some(Instant::now() + BATAS_PENUTUPAN_SSH);
                     }
+                    if let Some(pengendali) = self.pengendali_arsip.as_mut() {
+                        match pengendali.terima_buffer(buffer.clone()) {
+                            Ok(true) => continue,
+
+                            Ok(false) => {
+                                self.antrean_pesan
+                                    .tunda_di_depan(PesanTerminal::Keluaran(buffer));
+
+                                break;
+                            }
+
+                            Err(kesalahan) => {
+                                self.status = format!(
+                                    "Buffer arsip ditolak, output diproses langsung: {kesalahan:#}"
+                                );
+                            }
+                        }
+                    }
+
                     let layar_alternatif_sebelum = self.keadaan.motor.layar_alternatif_aktif();
 
                     let penanda_shell = self.keadaan.terima(&buffer);
 
-                    let layar_alternatif_aktif = self.keadaan.motor.layar_alternatif_aktif();
-
-                    if layar_alternatif_sebelum != layar_alternatif_aktif {
-                        self.keadaan.seleksi.bersihkan();
-                        self.arah_gulir_seleksi = 0;
-                    }
-
-                    for penanda in penanda_shell {
-                        if let PenandaShell::PerintahSelesai(kode_keluar) = penanda {
-                            self.selesaikan_perintah(kode_keluar);
-                        }
-                    }
-
-                    if self.keadaan.perintah_selesai_dari_prompt() {
-                        self.selesaikan_perintah(None);
-                    }
-
-                    self.kirim_respons_terminal();
+                    self.proses_efek_keluaran(layar_alternatif_sebelum, penanda_shell);
 
                     berubah = true;
                 }
@@ -244,12 +330,10 @@ impl RuangSesi {
                         continue;
                     }
 
-                    self.status = pesan;
-                    self.sesi = None;
-                    self.keadaan.siklus.akhiri_sesi();
+                    self.status = format!("Gagal membaca PTY: {pesan}");
 
                     berubah = true;
-                    break;
+                    continue;
                 }
 
                 Some(PesanTerminal::Berakhir) => {
@@ -263,7 +347,9 @@ impl RuangSesi {
                         break;
                     }
 
-                    self.status = format!("Sesi {} telah berakhir", self.jenis.nama());
+                    if !self.status.starts_with("Gagal membaca PTY:") {
+                        self.status = format!("Sesi {} telah berakhir", self.jenis.nama());
+                    }
 
                     self.sesi = None;
                     self.keadaan.siklus.akhiri_sesi();
@@ -406,6 +492,88 @@ impl JendelaTerminal {
             if ukuran_berubah || keluaran_berubah {
                 ruang.perbarui_pencarian(false);
 
+                berubah = true;
+            }
+        }
+
+        let mut pengendali_selesai = Vec::new();
+
+        for (_, ruang) in self.manajer.iter_sesi_mut() {
+            let siap = ruang.sesi.is_none()
+                && !ruang.antrean_pesan.ada_tertunda()
+                && ruang
+                    .pengendali_arsip
+                    .as_ref()
+                    .is_some_and(|pengendali| !pengendali.ada_pekerjaan_tertunda());
+
+            if siap && let Some(pengendali) = ruang.pengendali_arsip.take() {
+                let snapshot =
+                    if ruang.profil_lokal().is_some() || ruang.penutupan_ssh.pembaca_berakhir {
+                        ruang.keadaan.motor.salin_riwayat_akhir()
+                    } else {
+                        ruang
+                            .status
+                            .push_str(" | Arsip akhir dilewati: EOF PTY belum diterima");
+                        None
+                    };
+
+                pengendali_selesai.push((pengendali, snapshot));
+            }
+        }
+
+        for (pengendali, snapshot) in pengendali_selesai {
+            self.jadwalkan_penyelesaian_arsip(pengendali, snapshot);
+            berubah = true;
+        }
+        let mut kesalahan_penyelesaian_arsip = Vec::new();
+
+        self.tugas_penyelesaian_arsip
+            .retain_mut(|tugas| match tugas.periksa() {
+                None => true,
+
+                Some(Ok(())) => false,
+
+                Some(Err(kesalahan)) => {
+                    kesalahan_penyelesaian_arsip.push(kesalahan);
+                    false
+                }
+            });
+
+        let peringatan_arsip = self
+            .tugas_penyelesaian_arsip
+            .iter()
+            .find_map(|tugas| tugas.peringatan());
+
+        let tugas_arsip_berjalan = !self.tugas_penyelesaian_arsip.is_empty();
+
+        if let Some(ruang) = self.manajer.aktif_mut() {
+            match peringatan_arsip {
+                Some(pesan) if ruang.status != pesan => {
+                    ruang.status = pesan;
+                    berubah = true;
+                }
+
+                None if ruang.status.starts_with("Pengarsipan menunggu retry:")
+                    || ruang.status == "Finalisasi arsip belum selesai setelah 10 detik" =>
+                {
+                    ruang.status = if tugas_arsip_berjalan {
+                        "Finalisasi arsip sedang berlangsung".to_owned()
+                    } else {
+                        "Finalisasi arsip selesai".to_owned()
+                    };
+
+                    berubah = true;
+                }
+
+                _ => {}
+            }
+        }
+
+        for kesalahan in kesalahan_penyelesaian_arsip {
+            eprintln!("Gagal menyelesaikan arsip: {kesalahan:#}");
+
+            if let Some(ruang) = self.manajer.aktif_mut() {
+                ruang.status = format!("Gagal menyelesaikan arsip: {kesalahan:#}");
                 berubah = true;
             }
         }

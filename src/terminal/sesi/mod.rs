@@ -10,6 +10,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 mod io;
+const KAPASITAS_ANTREAN_PERISTIWA: usize = 64;
 
 use super::{
     profil_shell::ProfilShell,
@@ -193,7 +194,8 @@ impl SesiTerminal {
 
         let (pengirim_masukan, penerima_masukan) = mpsc::channel();
 
-        let (pengirim_peristiwa, penerima_peristiwa) = mpsc::channel();
+        let (pengirim_peristiwa, penerima_peristiwa) =
+            mpsc::sync_channel(KAPASITAS_ANTREAN_PERISTIWA);
 
         let pengirim_kesalahan = pengirim_peristiwa.clone();
 

@@ -17,7 +17,9 @@ use std::collections::HashMap;
 
 use super::keyboard_kitty::TombolKittyDitekan;
 
-use waifujahat_terminal::konfigurasi::PengaturanTerminal;
+use waifujahat_terminal::konfigurasi::{PengaturanTerminal, PenyimpananArsip};
+use waifujahat_terminal::terminal::PengendaliOutputArsip;
+use waifujahat_terminal::terminal::antrean_pesan::AntreanPesanTerminal;
 
 use waifujahat_terminal::terminal::{
     JenisSesiTerminal, KeadaanSesi, ProfilShell, ProsesTerminal, RekamanTombolWin32, SesiTerminal,
@@ -36,6 +38,8 @@ pub(super) struct RuangSesi {
     pub(super) penutupan_ssh: PenutupanSsh,
     pub(super) keadaan: KeadaanSesi,
     pub(super) sesi: Option<SesiTerminal>,
+    pub(super) antrean_pesan: AntreanPesanTerminal,
+    pub(super) pengendali_arsip: Option<PengendaliOutputArsip>,
     pub(super) gulir: ScrollHandle,
     pub(super) status: String,
     pub(super) batas_status_salin: Option<Instant>,
@@ -124,7 +128,7 @@ impl RuangSesi {
             }
         };
 
-        let (sesi, status) = match hasil {
+        let (sesi, mut status) = match hasil {
             Ok(sesi) => (Some(sesi), String::new()),
 
             Err(kesalahan) => {
@@ -142,6 +146,20 @@ impl RuangSesi {
             .and_then(SesiTerminal::direktori_awal)
             .map(Path::to_path_buf);
 
+        let pengendali_arsip = if sesi.is_some() && pengaturan.arsip_riwayat_aktif {
+            match PenyimpananArsip::bawaan().and_then(|penyimpanan| {
+                penyimpanan.buat_pengendali_aliran(true, pengaturan.batas_riwayat)
+            }) {
+                Ok(pengendali) => pengendali,
+                Err(kesalahan) => {
+                    status = format!("Persistent scrollback tidak aktif: {kesalahan:#}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             direktori_awal,
             pengaturan: pengaturan.clone(),
@@ -149,6 +167,8 @@ impl RuangSesi {
             penutupan_ssh: PenutupanSsh::default(),
             keadaan,
             sesi,
+            antrean_pesan: AntreanPesanTerminal::default(),
+            pengendali_arsip,
             gulir: ScrollHandle::new(),
             status,
             batas_status_salin: None,
@@ -162,6 +182,11 @@ impl RuangSesi {
             tombol_win32_ditekan: HashMap::new(),
             shell_turunan: Vec::new(),
         }
+    }
+
+    pub(super) fn ada_output_arsip_tertunda(&mut self) -> bool {
+        // Pengendali harus diselesaikan sebelum ruang sesi dilepaskan.
+        self.pengendali_arsip.is_some()
     }
 
     pub(super) fn direktori_workspace(&self) -> Option<&Path> {

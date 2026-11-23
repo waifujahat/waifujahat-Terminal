@@ -11,10 +11,32 @@ use super::{JendelaTerminal, ruang_sesi::RuangSesi};
 
 use waifujahat_terminal::{
     konfigurasi::{PengaturanTerminal, PenyimpananSsh},
-    terminal::{ArahPanel, IdSesi, IdTab, JenisSesiTerminal, ProfilShell, ProfilSsh},
+    terminal::{
+        ArahPanel, IdSesi, IdTab, JenisSesiTerminal, PengendaliOutputArsip, ProfilShell, ProfilSsh,
+    },
 };
 
 impl JendelaTerminal {
+    pub(super) fn jadwalkan_penyelesaian_arsip(
+        &mut self,
+        pengendali: PengendaliOutputArsip,
+        snapshot: Option<Vec<String>>,
+    ) {
+        match pengendali.mulai_penyelesaian_dengan_snapshot(snapshot) {
+            Ok(tugas) => {
+                self.tugas_penyelesaian_arsip.push(tugas);
+            }
+
+            Err(kesalahan) => {
+                eprintln!("Gagal menjadwalkan penyelesaian arsip: {kesalahan:#}");
+
+                if let Some(ruang) = self.manajer.aktif_mut() {
+                    ruang.status = format!("Gagal menjadwalkan penyelesaian arsip: {kesalahan:#}");
+                }
+            }
+        }
+    }
+
     pub(super) fn muat_profil_ssh_default(
         pengaturan: &PengaturanTerminal,
     ) -> anyhow::Result<Option<ProfilSsh>> {
@@ -168,8 +190,25 @@ impl JendelaTerminal {
             return;
         }
 
+        if self
+            .manajer
+            .ambil_mut(id)
+            .is_some_and(RuangSesi::ada_output_arsip_tertunda)
+        {
+            self.ruang_mut().status =
+                "Selesaikan sesi dengan exit dan tunggu pengarsipan sebelum menutup panel"
+                    .to_owned();
+
+            konteks.notify();
+            return;
+        }
+
         if let Some(mut ruang) = self.manajer.tutup_panel(id) {
             ruang.lepas_semua_tombol_win32();
+
+            if let Some(pengendali) = ruang.pengendali_arsip.take() {
+                self.jadwalkan_penyelesaian_arsip(pengendali, None);
+            }
 
             self.kepemilikan_tombol.batalkan_pemilik(id);
 
@@ -253,13 +292,35 @@ impl JendelaTerminal {
             return;
         }
 
+        if daftar_id.iter().copied().any(|id_sesi| {
+            self.manajer
+                .ambil_mut(id_sesi)
+                .is_some_and(RuangSesi::ada_output_arsip_tertunda)
+        }) {
+            self.ruang_mut().status =
+                "Selesaikan sesi dengan exit dan tunggu pengarsipan sebelum menutup tab".to_owned();
+
+            konteks.notify();
+            return;
+        }
+
+        let mut pengendali_dilepas = Vec::new();
+
         for id_sesi in daftar_id.iter().copied() {
             if let Some(ruang) = self.manajer.ambil_mut(id_sesi) {
                 ruang.lepas_semua_tombol_win32();
+
+                if let Some(pengendali) = ruang.pengendali_arsip.take() {
+                    pengendali_dilepas.push(pengendali);
+                }
             }
         }
 
         drop(self.manajer.tutup_tab(id));
+
+        for pengendali in pengendali_dilepas {
+            self.jadwalkan_penyelesaian_arsip(pengendali, None);
+        }
 
         for id_sesi in daftar_id {
             self.kepemilikan_tombol.batalkan_pemilik(id_sesi);
