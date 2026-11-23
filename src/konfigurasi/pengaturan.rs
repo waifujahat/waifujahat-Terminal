@@ -97,6 +97,9 @@ pub struct PengaturanTerminal {
     #[serde(rename = "scrollback", skip_serializing_if = "Option::is_none")]
     pub batas_riwayat: Option<usize>,
 
+    #[serde(rename = "persistent_scrollback")]
+    pub arsip_riwayat_aktif: bool,
+
     #[serde(rename = "confirmation")]
     pub konfirmasi_aktif: bool,
 }
@@ -112,6 +115,7 @@ impl Default for PengaturanTerminal {
             opasitas: None,
             gambar_latar: None,
             batas_riwayat: None,
+            arsip_riwayat_aktif: false,
             konfirmasi_aktif: true,
             ssh_default: None,
             ssh_auto_connect: false,

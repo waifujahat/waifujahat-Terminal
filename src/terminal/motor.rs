@@ -48,17 +48,79 @@ impl EventListener for PengirimRespons {
 
 pub struct MotorTerminal {
     terminal: Term<PengirimRespons>,
+    batas_riwayat: usize,
     parser: Processor,
     pengirim_respons: Sender<Vec<u8>>,
     penerima_respons: Receiver<Vec<u8>>,
     negosiasi_kitty: Option<NegosiasiKitty>,
     generasi_kitty: u64,
     mode_win32: ModeInputWin32,
+    generasi_riwayat: u64,
 }
 
 impl MotorTerminal {
     pub fn baru(kolom: usize, baris: usize) -> Self {
         Self::buat(kolom, baris, false, None)
+    }
+
+    pub fn generasi_riwayat(&self) -> u64 {
+        self.generasi_riwayat
+    }
+
+    pub fn batas_riwayat(&self) -> usize {
+        self.batas_riwayat
+    }
+
+    pub fn cadangkan_riwayat_sebelum_output(&mut self, jumlah_byte: usize) -> bool {
+        self.cadangkan_riwayat_dengan_batas(jumlah_byte, 16_384)
+    }
+
+    fn cadangkan_riwayat_dengan_batas(
+        &mut self,
+        jumlah_byte: usize,
+        batas_tambahan: usize,
+    ) -> bool {
+        const BATAS_POTONGAN: usize = 64;
+
+        if jumlah_byte == 0 || jumlah_byte > BATAS_POTONGAN {
+            return false;
+        }
+
+        if self.layar_alternatif_aktif() {
+            return true;
+        }
+
+        let (_, tinggi) = self.ukuran();
+
+        let Some(cadangan) = jumlah_byte.checked_mul(tinggi) else {
+            return false;
+        };
+
+        if cadangan > batas_tambahan {
+            return false;
+        }
+
+        let Some(kapasitas_maksimum) = self.batas_riwayat.checked_add(batas_tambahan) else {
+            return false;
+        };
+
+        let Some(kapasitas_diperlukan) = self.jumlah_baris_riwayat().checked_add(cadangan) else {
+            return false;
+        };
+
+        if kapasitas_diperlukan > kapasitas_maksimum {
+            return false;
+        }
+
+        let kapasitas = self.batas_riwayat.max(kapasitas_diperlukan);
+
+        self.terminal.grid_mut().update_history(kapasitas);
+
+        true
+    }
+
+    fn tandai_perubahan_riwayat(&mut self) {
+        self.generasi_riwayat = self.generasi_riwayat.wrapping_add(1);
     }
 
     pub fn baru_dengan_kitty(kolom: usize, baris: usize) -> Self {
@@ -87,6 +149,8 @@ impl MotorTerminal {
             konfigurasi.scrolling_history = batas;
         }
 
+        let batas_riwayat = konfigurasi.scrolling_history;
+
         Self {
             terminal: Term::new(
                 konfigurasi,
@@ -95,12 +159,14 @@ impl MotorTerminal {
                     pengirim: pengirim_respons.clone(),
                 },
             ),
+            batas_riwayat,
             parser: Processor::new(),
             pengirim_respons,
             penerima_respons,
             negosiasi_kitty: kitty.then(NegosiasiKitty::baru),
             generasi_kitty: 0,
             mode_win32: ModeInputWin32::baru(),
+            generasi_riwayat: 0,
         }
     }
 
@@ -269,6 +335,10 @@ impl MotorTerminal {
     }
 
     pub fn terima(&mut self, keluaran: &[u8]) {
+        if !keluaran.is_empty() {
+            self.tandai_perubahan_riwayat();
+        }
+
         self.periksa_timeout_sinkronisasi(Instant::now());
 
         self.mode_win32.terima(keluaran);
@@ -332,6 +402,8 @@ impl MotorTerminal {
             return false;
         }
 
+        self.tandai_perubahan_riwayat();
+
         let alternatif_sebelum = self.layar_alternatif_aktif();
 
         self.parser.stop_sync(&mut self.terminal);
@@ -348,6 +420,8 @@ impl MotorTerminal {
     }
 
     pub fn ubah_ukuran(&mut self, kolom: usize, baris: usize) {
+        self.tandai_perubahan_riwayat();
+
         let kolom = kolom.max(2);
         let baris = baris.max(1);
 
@@ -358,7 +432,6 @@ impl MotorTerminal {
             && self.jumlah_baris_riwayat() > 0
             && (kolom != kolom_sebelum || baris > baris_sebelum);
 
-        // Menandai awal viewport sebelum proses reflow.
         let penanda = if pertahankan_viewport {
             let grid = self.terminal.grid_mut();
             let sel = &mut grid[Line(0)][Column(0)];
@@ -488,6 +561,74 @@ impl MotorTerminal {
         }
 
         Some(teks.trim_end_matches(' ').to_string())
+    }
+
+    pub fn salin_riwayat_akhir(&self) -> Option<Vec<String>> {
+        if self.layar_alternatif_aktif() {
+            return None;
+        }
+
+        (0..self.jumlah_baris_riwayat())
+            .map(|indeks| self.baris_riwayat(indeks))
+            .collect()
+    }
+    pub fn siapkan_batch_arsip(&self, jumlah: usize) -> Vec<String> {
+        const BATAS_BATCH: usize = 64;
+
+        if self.layar_alternatif_aktif() {
+            return Vec::new();
+        }
+
+        let jumlah = jumlah.min(BATAS_BATCH).min(self.jumlah_baris_riwayat());
+
+        (0..jumlah)
+            .map(|indeks| self.baris_riwayat(indeks))
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default()
+    }
+
+    fn konfirmasi_batch_arsip(&mut self, jumlah: usize) -> bool {
+        const BATAS_BATCH: usize = 64;
+
+        let jumlah_riwayat = self.jumlah_baris_riwayat();
+
+        if jumlah == 0
+            || jumlah > BATAS_BATCH
+            || jumlah > jumlah_riwayat
+            || self.layar_alternatif_aktif()
+        {
+            return false;
+        }
+
+        let jumlah_tersisa = jumlah_riwayat - jumlah;
+        let kapasitas_pemulihan = self.batas_riwayat.max(jumlah_tersisa);
+
+        let grid = self.terminal.grid_mut();
+
+        grid.update_history(jumlah_tersisa);
+        grid.update_history(kapasitas_pemulihan);
+
+        self.tandai_perubahan_riwayat();
+
+        true
+    }
+
+    pub fn konfirmasi_batch_arsip_terverifikasi(
+        &mut self,
+        generasi: u64,
+        baris: &[String],
+    ) -> bool {
+        if generasi != self.generasi_riwayat || baris.is_empty() || self.layar_alternatif_aktif() {
+            return false;
+        }
+
+        let baris_sekarang = self.siapkan_batch_arsip(baris.len());
+
+        if baris_sekarang != baris {
+            return false;
+        }
+
+        self.konfirmasi_batch_arsip(baris.len())
     }
 
     pub fn offset_riwayat(&self) -> usize {

@@ -35,7 +35,7 @@ use gpui::{
 
 use waifujahat_terminal::terminal::{
     IdSesi, KepemilikanTombol, ManajerTab, PemantauProsesShell, RekamanTombolWin32,
-    StatusKepemilikanTombol,
+    StatusKepemilikanTombol, TugasPenyelesaianArsip,
 };
 
 use divider_panel::TarikanPanel;
@@ -74,6 +74,7 @@ pub(crate) struct JendelaTerminal {
     #[cfg(windows)]
     pengamat_keyboard_win32: Option<PengamatKeyboardWin32>,
     pemantau_shell: Option<PemantauProsesShell>,
+    tugas_penyelesaian_arsip: Vec<TugasPenyelesaianArsip>,
     edit_nama_tab: Option<EditNamaTab>,
     pengaturan: PengaturanTerminal,
     penyimpan_workspace: Option<Arc<AutosaveWorkspace>>,
@@ -179,17 +180,42 @@ impl JendelaTerminal {
             })
         });
 
-        if penyimpan_workspace.is_some() {
-            let terminal = konteks.weak_entity();
+        let terminal_saat_tutup = konteks.weak_entity();
 
-            jendela.on_window_should_close(konteks, move |_, aplikasi| {
-                let _ = terminal.update(aplikasi, |terminal, _| {
-                    terminal.simpan_workspace_akhir();
-                });
+        jendela.on_window_should_close(konteks, move |_, aplikasi| {
+            terminal_saat_tutup
+                .update(aplikasi, |terminal, konteks| {
+                    let arsip_tertunda = terminal
+                        .manajer
+                        .iter_sesi_mut()
+                        .any(|(_, ruang)| ruang.ada_output_arsip_tertunda());
 
-                true
-            });
-        }
+                    if arsip_tertunda || !terminal.tugas_penyelesaian_arsip.is_empty() {
+                        let pesan = terminal
+                            .tugas_penyelesaian_arsip
+                            .iter()
+                            .find_map(|tugas| tugas.peringatan())
+                            .unwrap_or_else(|| {
+                                "Sesi masih aktif atau arsip belum selesai, jalankan exit lalu tutup kembali"
+                                    .to_owned()
+                            });
+
+                        if let Some(ruang) = terminal.manajer.aktif_mut() {
+                            ruang.status = pesan;
+                        }
+
+                        konteks.notify();
+                        return false;
+                    }
+
+                    if terminal.penyimpan_workspace.is_some() {
+                        terminal.simpan_workspace_akhir();
+                    }
+
+                    true
+                })
+                .unwrap_or(true)
+        });
 
         let pemantau_shell = match PemantauProsesShell::baru() {
             Ok(pemantau) => Some(pemantau),
@@ -217,6 +243,7 @@ impl JendelaTerminal {
             #[cfg(windows)]
             pengamat_keyboard_win32,
             pemantau_shell,
+            tugas_penyelesaian_arsip: Vec::new(),
             edit_nama_tab: None,
             pengaturan: pengaturan.unwrap_or_default(),
             penyimpan_workspace,
